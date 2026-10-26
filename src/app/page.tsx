@@ -6,7 +6,8 @@ import {
   AlertCircle, Search, PlusCircle, Check, X, 
   ArrowRight, ShieldCheck, Tag, Sparkles, Phone,
   TrendingDown, CheckSquare, Square, LogIn, UserPlus,
-  LogOut, User, Lock, ChevronRight, Zap, Trash2, Loader2
+  LogOut, User, Lock, ChevronRight, Zap, Trash2, Loader2,
+  Database, RefreshCw, Table, Layers
 } from 'lucide-react';
 
 interface Ride {
@@ -57,6 +58,12 @@ export default function CampusPoolApp() {
   const [isBookingSeat, setIsBookingSeat] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<number | string | null>(null);
 
+  // Admin Live Tables state
+  const [adminTables, setAdminTables] = useState<Record<string, any[]> | null>(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminActiveTable, setAdminActiveTable] = useState<string>('all');
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string>('');
+
   // App tabs: 'find' | 'offer' | 'bookings'
   const [activeTab, setActiveTab] = useState<'find' | 'offer' | 'bookings'>('find');
   const [myRidesSubTab, setMyRidesSubTab] = useState<'passenger' | 'driver'>('passenger');
@@ -96,7 +103,7 @@ export default function CampusPoolApp() {
     destination: 'VESIT Campus',
     departure_time: '',
     available_seats: 3,
-    cost_per_seat: 40,
+    cost_per_seat: 50,
   });
 
   // Automatically format Indian Vehicle Number Plate: e.g. MH-01-AB-1234
@@ -352,6 +359,109 @@ export default function CampusPoolApp() {
     }
   };
 
+  // Fetch Live TiDB Tables for Admin
+  const fetchAdminTables = async () => {
+    setAdminLoading(true);
+    try {
+      const res = await fetch('/api/admin/tables');
+      const data = await res.json();
+      if (data.success) {
+        setAdminTables(data.tables);
+        setLastRefreshedAt(new Date().toLocaleTimeString());
+        showToast('Live tables refreshed from TiDB database!', 'success');
+      } else {
+        showToast(data.error || 'Failed to fetch database tables', 'error');
+      }
+    } catch {
+      showToast('Network error while refreshing tables', 'error');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser?.username?.toLowerCase() === 'admin') {
+      fetchAdminTables();
+    }
+  }, [currentUser]);
+
+  // Admin Live Tables Renderer
+  const renderTableData = (tableName: string, data: any[] | undefined) => {
+    const rows = data || [];
+    if (rows.length === 0) {
+      return (
+        <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+          <Database className="w-7 h-7 text-slate-300 mx-auto mb-2" />
+          <p className="text-xs font-semibold text-slate-600">Table `{tableName}` has 0 records</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Records created in the app will appear here in real-time.</p>
+        </div>
+      );
+    }
+
+    const columns = Object.keys(rows[0]);
+
+    return (
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-slate-100 text-slate-700 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200">
+            <tr>
+              {columns.map((col) => (
+                <th key={col} className="px-3 py-2.5 whitespace-nowrap">
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {rows.map((row, i) => (
+              <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                {columns.map((col) => {
+                  const val = row[col];
+                  let displayVal: React.ReactNode = String(val ?? 'NULL');
+
+                  // Format dates/timestamps
+                  if (typeof val === 'string' && val.includes('T') && val.includes('Z')) {
+                    displayVal = new Date(val).toLocaleString();
+                  }
+
+                  // Status badge
+                  if (col.toLowerCase().includes('status') && typeof val === 'string') {
+                    const status = val.toUpperCase();
+                    const colorClass = 
+                      status === 'ACTIVE' || status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                      status === 'PENDING' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                      status === 'REJECTED' || status === 'CANCELLED' ? 'bg-rose-100 text-rose-800 border-rose-200' :
+                      'bg-slate-100 text-slate-700 border-slate-200';
+                    displayVal = (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${colorClass}`}>
+                        {status}
+                      </span>
+                    );
+                  }
+
+                  // ID formatting
+                  if (col.toLowerCase().endsWith('_id') && val != null) {
+                    displayVal = <span className="font-mono text-slate-600 font-bold">#{val}</span>;
+                  }
+
+                  return (
+                    <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                      {val === null || val === undefined ? (
+                        <span className="italic text-slate-400">NULL</span>
+                      ) : (
+                        displayVal
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   // Regular Auth Form Submit
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -397,6 +507,8 @@ export default function CampusPoolApp() {
     setCurrentUser(null);
     localStorage.removeItem('campuspool_user');
     setPassengerNameInput('');
+    setAdminTables(null);
+    setAdminActiveTable('all');
     setNewRideForm({
       driver_name: '',
       driver_phone: '9820112233',
@@ -406,7 +518,7 @@ export default function CampusPoolApp() {
       destination: 'VESIT Campus',
       departure_time: '',
       available_seats: 3,
-      cost_per_seat: 40,
+      cost_per_seat: 50,
     });
     showToast('Logged out successfully', 'info');
   };
@@ -538,7 +650,7 @@ export default function CampusPoolApp() {
             destination: 'VESIT Campus',
             departure_time: '',
             available_seats: 3,
-            cost_per_seat: 40,
+            cost_per_seat: 50,
           });
         }
         fetchRides();
@@ -648,7 +760,7 @@ export default function CampusPoolApp() {
   };
 
   // Arithmetic Calculation for Selected Ride
-  const unitPrice = selectedRide ? selectedRide.cost_per_seat : 40;
+  const unitPrice = selectedRide ? Number(selectedRide.cost_per_seat) : 0;
   const baseFare = requestedSeats * unitPrice;
   const discountAmount = applyStudentDiscount ? baseFare * 0.10 : 0;
   const finalFare = baseFare - discountAmount;
@@ -692,46 +804,69 @@ export default function CampusPoolApp() {
 
           {/* Navigation Bar (Always Clickable) */}
           <div className="flex items-center space-x-2 sm:space-x-3">
-            <nav className="flex space-x-1 bg-slate-100 p-1 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setActiveTab('find')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer ${
-                  activeTab === 'find' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Search className="w-3.5 h-3.5" />
-                <span>Find Ride</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('offer')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer ${
-                  activeTab === 'offer' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <PlusCircle className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Offer Ride</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('bookings')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer ${
-                  activeTab === 'bookings' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>My Rides</span>
-                {bookings.filter(b => b.booking_status === 'PENDING').length > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                )}
-              </button>
-            </nav>
+            {currentUser?.username?.toLowerCase() === 'admin' ? (
+              <div className="flex items-center space-x-2">
+                <span className="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold">
+                  <Database className="w-3.5 h-3.5 text-purple-600" />
+                  <span>TiDB Live Tables</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={fetchAdminTables}
+                  disabled={adminLoading}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs cursor-pointer active:scale-95 disabled:opacity-50"
+                  title="Refresh Database Tables"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${adminLoading ? 'animate-spin' : ''}`} />
+                  <span>{adminLoading ? 'Refreshing...' : 'Refresh'}</span>
+                </button>
+              </div>
+            ) : (
+              <nav className="flex space-x-1 bg-slate-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('find')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer ${
+                    activeTab === 'find' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  <span>Find Ride</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('offer')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer ${
+                    activeTab === 'offer' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <PlusCircle className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Offer Ride</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('bookings')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer ${
+                    activeTab === 'bookings' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>My Rides</span>
+                  {bookings.filter(b => b.booking_status === 'PENDING').length > 0 && (
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  )}
+                </button>
+              </nav>
+            )}
 
             {/* User Profile / Login */}
             {currentUser ? (
               <div className="flex items-center space-x-2">
-                <div className="flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200 text-emerald-900 px-3 py-1.5 rounded-xl text-xs font-bold">
-                  <User className="w-3.5 h-3.5 text-emerald-600" />
+                <div className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold ${
+                  currentUser.username.toLowerCase() === 'admin'
+                    ? 'bg-purple-100 border border-purple-300 text-purple-900'
+                    : 'bg-emerald-50 border border-emerald-200 text-emerald-900'
+                }`}>
+                  <User className={`w-3.5 h-3.5 ${currentUser.username.toLowerCase() === 'admin' ? 'text-purple-600' : 'text-emerald-600'}`} />
                   <span>{currentUser.username}</span>
                 </div>
                 <button
@@ -774,10 +909,138 @@ export default function CampusPoolApp() {
 
       {/* Main Content Area */}
       <main className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 flex-1 space-y-6">
-        {/* ========================================================================= */}
-        {/* TAB 1: FIND RIDES (PASSENGER) */}
-        {/* ========================================================================= */}
-        {activeTab === 'find' && (
+        {currentUser?.username?.toLowerCase() === 'admin' ? (
+          /* ========================================================================= */
+          /* ADMIN DASHBOARD: LIVE TIDB DATABASE TABLES */
+          /* ========================================================================= */
+          <div className="space-y-6">
+            {/* Admin Header Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-purple-950 to-slate-900 text-white rounded-2xl p-6 sm:p-7 shadow-xl border border-purple-500/20 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <div className="flex items-center space-x-2 mb-2">
+                  <span className="inline-flex items-center space-x-1.5 bg-purple-500/20 text-purple-300 text-xs px-2.5 py-1 rounded-full font-bold border border-purple-400/30">
+                    <Database className="w-3.5 h-3.5" />
+                    <span>TiDB Serverless Live Database</span>
+                  </span>
+                  <span className="inline-flex items-center space-x-1 bg-emerald-500/20 text-emerald-300 text-xs px-2 py-0.5 rounded-full font-bold border border-emerald-400/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Live Connected</span>
+                  </span>
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Database Live Tables</h1>
+                <p className="text-slate-300 text-xs sm:text-sm mt-1">
+                  Real-time direct view of all live tables in TiDB database <code className="text-purple-300 bg-purple-900/50 px-1.5 py-0.5 rounded">ridesync_db</code>.
+                  {lastRefreshedAt && <span className="ml-2 text-slate-400 font-mono text-xs">(Last refreshed: {lastRefreshedAt})</span>}
+                </p>
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  type="button"
+                  onClick={fetchAdminTables}
+                  disabled={adminLoading}
+                  className="flex items-center space-x-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-extrabold text-sm shadow-lg shadow-emerald-500/20 transition cursor-pointer active:scale-95 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${adminLoading ? 'animate-spin' : ''}`} />
+                  <span>{adminLoading ? 'Refreshing Tables...' : 'Refresh Tables'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Table Tabs / Switcher */}
+            {(() => {
+              const tableNames = ['Users', 'Vehicles', 'Rides', 'Bookings', 'Ratings', 'Ride_Logs'];
+              const displayedTables = adminActiveTable === 'all' 
+                ? tableNames 
+                : tableNames.filter((t) => t === adminActiveTable);
+
+              return (
+                <>
+                  <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+                    <button
+                      type="button"
+                      onClick={() => setAdminActiveTable('all')}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                        adminActiveTable === 'all'
+                          ? 'bg-slate-900 text-white shadow-xs'
+                          : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>All Tables (6)</span>
+                    </button>
+                    {tableNames.map((tbl) => {
+                      const count = adminTables?.[tbl]?.length ?? 0;
+                      const isSelected = adminActiveTable === tbl;
+                      return (
+                        <button
+                          key={tbl}
+                          type="button"
+                          onClick={() => setAdminActiveTable(tbl)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                            isSelected
+                              ? 'bg-purple-600 text-white shadow-xs'
+                              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                          }`}
+                        >
+                          <Table className="w-3.5 h-3.5" />
+                          <span>{tbl}</span>
+                          <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                            isSelected ? 'bg-purple-700 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Tables Display */}
+                  {adminLoading && !adminTables ? (
+                    <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 p-8 shadow-xs">
+                      <RefreshCw className="w-8 h-8 text-purple-600 animate-spin mx-auto mb-3" />
+                      <h3 className="text-sm font-bold text-slate-800">Fetching live tables from TiDB...</h3>
+                      <p className="text-xs text-slate-500 mt-1">Reading Users, Vehicles, Rides, Bookings, Ratings, Ride_Logs</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {displayedTables.map((tbl) => {
+                        const rows = adminTables?.[tbl] || [];
+                        return (
+                          <div key={tbl} className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                            <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <div className="p-1.5 rounded-lg bg-purple-100 text-purple-700">
+                                  <Table className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <h3 className="font-extrabold text-slate-900 text-sm">{tbl}</h3>
+                                  <p className="text-[11px] text-slate-500">TiDB table: <code className="text-purple-700 font-mono">ridesync_db.{tbl}</code></p>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-200/70 text-slate-700">
+                                  {rows.length} {rows.length === 1 ? 'row' : 'rows'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="p-4">
+                              {renderTableData(tbl, rows)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        ) : (
+          <>
+            {/* ========================================================================= */}
+            {/* TAB 1: FIND RIDES (PASSENGER) */}
+            {/* ========================================================================= */}
+            {activeTab === 'find' && (
           <div className="space-y-6">
             {/* Hero / Route Search Banner */}
             <div className="bg-gradient-to-r from-emerald-800 to-teal-700 rounded-2xl p-6 sm:p-8 text-white shadow-lg relative overflow-hidden">
@@ -787,10 +1050,10 @@ export default function CampusPoolApp() {
                   <span>College Verified Student Carpools</span>
                 </span>
                 <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">
-                  Pool a Ride to VESIT Campus for ₹40
+                  Pool a Ride to VESIT Campus
                 </h1>
                 <p className="text-emerald-100 text-xs sm:text-sm mb-5">
-                  Skip the crowded local train and auto queues. Travel comfortably in a student carpool and get 10% off with your college ID!
+                  Skip the crowded local train and auto queues. Travel comfortably with college peers and get 10% off with your student ID!
                 </p>
 
                 {/* 3 Clickable Feature Cards */}
@@ -801,18 +1064,18 @@ export default function CampusPoolApp() {
                       setSearchSource('');
                       setSearchDest('');
                       fetchRides();
-                      showToast('Showing all carpools at standard ₹40 rent', 'info');
+                      showToast('Showing all available student carpools', 'info');
                     }}
                     className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-left transition cursor-pointer active:scale-95"
                   >
-                    <div className="font-extrabold text-xs text-white">💰 ₹40 Fixed Rent</div>
-                    <div className="text-[10px] text-emerald-200">Affordable seat sharing</div>
+                    <div className="font-extrabold text-xs text-white">💰 Affordable Split Fare</div>
+                    <div className="text-[10px] text-emerald-200">Driver-set shared fuel rates</div>
                   </button>
 
                   <button 
                     type="button"
                     onClick={() => {
-                      showToast('💡 10% Subsidy Arithmetic: Seats × ₹40 - 10% Off = Final Payable!', 'info');
+                      showToast('💡 10% Subsidy Arithmetic: Seats × Fare - 10% Off = Final Payable!', 'info');
                     }}
                     className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-left transition cursor-pointer active:scale-95"
                   >
@@ -1357,7 +1620,7 @@ export default function CampusPoolApp() {
                     <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
                       <Car className="w-12 h-12 text-slate-300 mx-auto mb-2" />
                       <p className="text-sm font-semibold text-slate-700">You haven't booked any rides yet</p>
-                      <p className="text-xs text-slate-400 mt-1 mb-4">Find a carpool to campus and rent a seat for ₹40!</p>
+                      <p className="text-xs text-slate-400 mt-1 mb-4">Find a carpool to campus and book an affordable seat!</p>
                       <button
                         type="button"
                         onClick={() => setActiveTab('find')}
@@ -1749,6 +2012,8 @@ export default function CampusPoolApp() {
             })()}
           </div>
         )}
+          </>
+        )}
       </main>
 
       {/* ========================================================================= */}
@@ -1983,6 +2248,22 @@ export default function CampusPoolApp() {
               >
                 {authLoading ? 'Connecting...' : authMode === 'login' ? 'Login' : 'Create Account'}
               </button>
+
+              {authMode === 'login' && (
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                  <span>Admin Live DB:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthUsername('admin');
+                      setAuthPassword('123');
+                    }}
+                    className="text-purple-600 hover:text-purple-700 font-bold hover:underline cursor-pointer"
+                  >
+                    Fill admin / 123
+                  </button>
+                </div>
+              )}
             </form>
           </div>
         </div>
@@ -1992,7 +2273,7 @@ export default function CampusPoolApp() {
       <footer className="bg-white border-t border-slate-200 py-4 mt-auto">
         <div className="max-w-6xl mx-auto px-4 text-center text-xs text-slate-400 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>CampusPool — VESIT College Carpool Matching System</span>
-          <span>Point A to Point B • ₹40 / Seat • 10% Student Subsidy</span>
+          <span>Point A to Point B • Affordable Shared Fares • 10% Student Subsidy</span>
         </div>
       </footer>
     </div>

@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Please provide all ride details' }, { status: 400 });
     }
 
-    const fare = Number(cost_per_seat) || 40.0;
+    const fare = cost_per_seat !== undefined && cost_per_seat !== '' ? Number(cost_per_seat) : 0;
     const seats = Number(available_seats) || 3;
 
     // Resolve driver_id and vehicle_id from DB

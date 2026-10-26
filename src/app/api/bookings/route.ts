@@ -78,12 +78,27 @@ export async function POST(req: NextRequest) {
 
     // Find the target ride (check DB or mock)
     let driverName = 'Aarav Sharma';
+    let unitPrice = 0;
+    let rideSource = 'Chembur';
+    let rideDestination = 'VESIT Campus';
+    let rideDepartureTime = '08:15 AM';
+
     const dbRide = await query<any[]>('SELECT r.*, COALESCE(u.username, u.full_name) as driver_name FROM Rides r JOIN Users u ON r.driver_id = u.user_id WHERE r.ride_id = ?', [rideId]);
     if (dbRide && dbRide.length > 0) {
       driverName = dbRide[0].driver_name;
+      unitPrice = Number(dbRide[0].cost_per_seat) || 0;
+      rideSource = dbRide[0].source || 'Chembur';
+      rideDestination = dbRide[0].destination || 'VESIT Campus';
+      rideDepartureTime = dbRide[0].departure_time || '08:15 AM';
     } else {
       const mockRide = mockDb.rides.find(r => r.ride_id === rideId);
-      if (mockRide) driverName = mockRide.driver_name;
+      if (mockRide) {
+        driverName = mockRide.driver_name;
+        unitPrice = Number(mockRide.cost_per_seat) || 0;
+        rideSource = mockRide.source || 'Chembur';
+        rideDestination = mockRide.destination || 'VESIT Campus';
+        rideDepartureTime = mockRide.departure_time || '08:15 AM';
+      }
     }
 
     // Validation: Driver cannot book their own ride
@@ -95,9 +110,6 @@ export async function POST(req: NextRequest) {
         error: 'You cannot book a seat on your own ride! You are the driver.',
       }, { status: 400 });
     }
-
-    const ride = mockDb.rides.find(r => r.ride_id === rideId);
-    const unitPrice = ride ? Number(ride.cost_per_seat) : 40.0;
 
     // ARITHMETIC OPERATIONS
     const baseFare = Number((seatsReq * unitPrice).toFixed(2));
@@ -137,9 +149,9 @@ export async function POST(req: NextRequest) {
       passenger_id: passengerId,
       passenger_name: passenger_name || 'VESIT Student',
       passenger_phone: passenger_phone || '9820445566',
-      source: ride?.source || 'Chembur',
-      destination: ride?.destination || 'VESIT Campus',
-      departure_time: ride?.departure_time || '08:15 AM',
+      source: rideSource,
+      destination: rideDestination,
+      departure_time: rideDepartureTime,
       cost_per_seat: unitPrice,
       seats_requested: seatsReq,
       has_student_discount: hasDiscount,

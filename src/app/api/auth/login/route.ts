@@ -19,8 +19,9 @@ export async function POST(req: NextRequest) {
     );
 
     if (!rows || rows.length === 0) {
-      // In-memory fallback for the 7 college logins if DB is momentarily unreachable
+      // In-memory fallback for college logins if DB is momentarily unreachable
       const demoUsers: Record<string, { id: number; name: string }> = {
+        admin: { id: 1, name: 'Administrator' },
         tanmay: { id: 60003, name: 'Tanmay Shinde' },
         antara: { id: 60004, name: 'Antara Parab' },
         tanvi: { id: 90002, name: 'Tanvi Sawant' },
