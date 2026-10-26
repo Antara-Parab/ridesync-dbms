@@ -9,7 +9,44 @@ export async function POST(
   const bookingId = Number(id);
 
   try {
-    // 1. Check in-memory database
+    // 1. Try MySQL Database first
+    const dbBookings = await query<any[]>(
+      `SELECT b.*, r.available_seats, COALESCE(p.username, p.full_name) as passenger_name 
+       FROM Bookings b 
+       JOIN Rides r ON b.ride_id = r.ride_id 
+       JOIN Users p ON b.passenger_id = p.user_id 
+       WHERE b.booking_id = ?`,
+      [bookingId]
+    );
+
+    if (dbBookings && Array.isArray(dbBookings) && dbBookings.length > 0) {
+      const b = dbBookings[0];
+      if (b.available_seats < b.seats_requested) {
+        return NextResponse.json({
+          success: false,
+          error: `Cannot accept: Only ${b.available_seats} seat(s) remaining, but passenger requested ${b.seats_requested}.`,
+        }, { status: 400 });
+      }
+
+      await query("UPDATE Bookings SET booking_status = 'ACCEPTED' WHERE booking_id = ?", [bookingId]);
+      await query("UPDATE Rides SET available_seats = available_seats - ? WHERE ride_id = ?", [b.seats_requested, b.ride_id]);
+
+      // Update mockDb if present
+      const mockB = mockDb.bookings.find(mb => mb.booking_id === bookingId);
+      if (mockB) {
+        mockB.booking_status = 'ACCEPTED';
+        const mockR = mockDb.rides.find(mr => mr.ride_id === mockB.ride_id);
+        if (mockR) mockR.available_seats -= b.seats_requested;
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Booking accepted! ${b.seats_requested} seat(s) reserved for ${b.passenger_name}.`,
+        available_seats_left: b.available_seats - b.seats_requested,
+      });
+    }
+
+    // 2. Fallback to in-memory mockDb
     const booking = mockDb.bookings.find(b => b.booking_id === bookingId);
     if (!booking) {
       return NextResponse.json({ success: false, error: 'Booking request not found' }, { status: 404 });
@@ -30,10 +67,6 @@ export async function POST(
     // Arithmetic seat decrement
     ride.available_seats -= booking.seats_requested;
     booking.booking_status = 'ACCEPTED';
-
-    // Also update in MySQL if connected
-    await query("UPDATE Bookings SET booking_status = 'ACCEPTED' WHERE booking_id = ?", [bookingId]);
-    await query("UPDATE Rides SET available_seats = available_seats - ? WHERE ride_id = ?", [booking.seats_requested, booking.ride_id]);
 
     return NextResponse.json({
       success: true,

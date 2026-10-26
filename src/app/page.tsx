@@ -25,6 +25,7 @@ interface Ride {
 interface Booking {
   booking_id: number;
   ride_id: number;
+  driver_name?: string;
   passenger_name: string;
   passenger_phone: string;
   source: string;
@@ -250,7 +251,7 @@ export default function CampusPoolApp() {
   const handleConfirmBooking = async () => {
     if (!selectedRide) return;
 
-    const bookerName = passengerNameInput.trim() || currentUser?.username || 'Student Passenger';
+    const bookerName = currentUser?.username || passengerNameInput.trim() || 'Student Passenger';
 
     try {
       const res = await fetch('/api/bookings', {
@@ -271,6 +272,7 @@ export default function CampusPoolApp() {
         setSelectedRide(null);
         fetchBookings();
         fetchRides();
+        setMyRidesSubTab('passenger');
         setActiveTab('bookings');
       } else {
         showToast(data.error || 'Failed to submit booking', 'error');
@@ -938,204 +940,328 @@ export default function CampusPoolApp() {
               </button>
             </div>
 
-            {/* 1. PASSENGER VIEW (TRIPS I BOOKED) */}
-            {myRidesSubTab === 'passenger' && (
-              <div className="space-y-4">
-                {bookings.length === 0 ? (
-                  <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
-                    <Car className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-slate-700">You haven't booked any rides yet</p>
-                    <p className="text-xs text-slate-400 mt-1 mb-4">Find a carpool to campus and rent a seat for ₹40!</p>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('find')}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
-                    >
-                      Browse Available Carpools
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {bookings.map((b) => (
-                      <div 
-                        key={b.booking_id}
-                        className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between"
+            {/* 1. PASSENGER VIEW (TRIPS I BOOKED - SPLIT INTO PENDING & CONFIRMED) */}
+            {myRidesSubTab === 'passenger' && (() => {
+              const currentName = currentUser?.username?.toLowerCase() || '';
+              // Filter to current user's booked trips if logged in
+              const userTrips = currentUser
+                ? bookings.filter(b => b.passenger_name.toLowerCase() === currentName)
+                : bookings;
+
+              const pendingTrips = userTrips.filter(b => b.booking_status === 'PENDING');
+              const confirmedTrips = userTrips.filter(b => b.booking_status === 'ACCEPTED');
+              const declinedTrips = userTrips.filter(b => b.booking_status === 'REJECTED');
+
+              return (
+                <div className="space-y-6">
+                  {userTrips.length === 0 ? (
+                    <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+                      <Car className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm font-semibold text-slate-700">You haven't booked any rides yet</p>
+                      <p className="text-xs text-slate-400 mt-1 mb-4">Find a carpool to campus and rent a seat for ₹40!</p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('find')}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
                       >
-                        <div>
-                          {/* Route & Status Header */}
-                          <div className="flex items-start justify-between mb-3 border-b border-slate-100 pb-3">
-                            <div>
-                              <div className="flex items-center space-x-1.5 font-bold text-slate-900 text-sm">
-                                <span>{b.source}</span>
-                                <ArrowRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                <span>{b.destination}</span>
-                              </div>
-                              <div className="text-[11px] text-slate-500 flex items-center space-x-1 mt-0.5">
-                                <Clock className="w-3 h-3 text-slate-400" />
-                                <span>Departure: {b.departure_time}</span>
-                              </div>
-                            </div>
+                        Browse Available Carpools
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* SECTION 1: APPROVAL PENDING */}
+                      <div>
+                        <div className="flex items-center space-x-2 mb-3">
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                          <h4 className="text-sm font-bold text-slate-900">
+                            Approval Pending ({pendingTrips.length})
+                          </h4>
+                          <span className="text-[11px] text-slate-500">
+                            — Waiting for driver confirmation
+                          </span>
+                        </div>
 
-                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0 ${
-                              b.booking_status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                              b.booking_status === 'PENDING' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                              'bg-rose-100 text-rose-800 border border-rose-200'
-                            }`}>
-                              {b.booking_status === 'ACCEPTED' ? '✅ Confirmed' :
-                               b.booking_status === 'PENDING' ? '⏳ Awaiting Driver' : '❌ Declined'}
-                            </span>
+                        {pendingTrips.length === 0 ? (
+                          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-400 text-xs text-center">
+                            No pending ride requests.
                           </div>
-
-                          {/* Ride Info Box */}
-                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-1.5 mb-3">
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">Passenger:</span>
-                              <span className="font-semibold text-slate-800">{b.passenger_name} ({b.passenger_phone})</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">Seats Reserved:</span>
-                              <span className="font-bold text-slate-900">{b.seats_requested} seat(s)</span>
-                            </div>
-                            <div className="flex justify-between items-baseline">
-                              <span className="text-slate-400">Total Payable:</span>
-                              <div className="text-right">
-                                <span className="font-black text-slate-900 text-sm">₹{b.discounted_fare}</span>
-                                {b.has_student_discount && (
-                                  <span className="ml-1 text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1 rounded">
-                                    10% Student Discount Applied
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {pendingTrips.map((b) => (
+                              <div key={b.booking_id} className="bg-white rounded-2xl border border-amber-200 p-5 shadow-xs">
+                                <div className="flex items-start justify-between mb-3 border-b border-slate-100 pb-3">
+                                  <div>
+                                    <div className="flex items-center space-x-1.5 font-bold text-slate-900 text-sm">
+                                      <span>{b.source}</span>
+                                      <ArrowRight className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                      <span>{b.destination}</span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 flex items-center space-x-1 mt-0.5">
+                                      <Clock className="w-3 h-3 text-slate-400" />
+                                      <span>Departure: {b.departure_time}</span>
+                                    </div>
+                                  </div>
+                                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                    ⏳ Pending Approval
                                   </span>
-                                )}
+                                </div>
+
+                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-1.5 mb-3">
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-400">Driver:</span>
+                                    <span className="font-semibold text-slate-800">{b.driver_name || 'Student Driver'}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-400">Seats Applied:</span>
+                                    <span className="font-bold text-slate-900">{b.seats_requested} seat(s)</span>
+                                  </div>
+                                  <div className="flex justify-between items-baseline">
+                                    <span className="text-slate-400">Estimated Fare:</span>
+                                    <span className="font-black text-slate-900 text-sm">₹{b.discounted_fare}</span>
+                                  </div>
+                                </div>
+                                <p className="text-[11px] text-amber-700 font-medium">
+                                  ⏳ Your request is with the driver. Once approved, your seat will be reserved!
+                                </p>
                               </div>
-                            </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* SECTION 2: BOOKED & CONFIRMED */}
+                      <div>
+                        <div className="flex items-center space-x-2 mb-3">
+                          <CheckCircle className="w-4 h-4 text-emerald-600" />
+                          <h4 className="text-sm font-bold text-slate-900">
+                            Booked & Confirmed ({confirmedTrips.length})
+                          </h4>
+                          <span className="text-[11px] text-slate-500">
+                            — Seat reserved! Pay upon boarding
+                          </span>
+                        </div>
+
+                        {confirmedTrips.length === 0 ? (
+                          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-400 text-xs text-center">
+                            No confirmed trips yet.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {confirmedTrips.map((b) => (
+                              <div key={b.booking_id} className="bg-white rounded-2xl border border-emerald-200 p-5 shadow-xs">
+                                <div className="flex items-start justify-between mb-3 border-b border-slate-100 pb-3">
+                                  <div>
+                                    <div className="flex items-center space-x-1.5 font-bold text-slate-900 text-sm">
+                                      <span>{b.source}</span>
+                                      <ArrowRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                      <span>{b.destination}</span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 flex items-center space-x-1 mt-0.5">
+                                      <Clock className="w-3 h-3 text-slate-400" />
+                                      <span>Departure: {b.departure_time}</span>
+                                    </div>
+                                  </div>
+                                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    ✅ Confirmed
+                                  </span>
+                                </div>
+
+                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-1.5 mb-3">
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-400">Driver:</span>
+                                    <span className="font-semibold text-slate-800">{b.driver_name || 'Student Driver'}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-400">Seats Confirmed:</span>
+                                    <span className="font-bold text-slate-900">{b.seats_requested} seat(s)</span>
+                                  </div>
+                                  <div className="flex justify-between items-baseline">
+                                    <span className="text-slate-400">Total Payable:</span>
+                                    <span className="font-black text-emerald-700 text-sm">₹{b.discounted_fare}</span>
+                                  </div>
+                                </div>
+                                <p className="text-[11px] text-emerald-800 font-semibold bg-emerald-50 p-2 rounded-lg">
+                                  🎉 Your seat is reserved! Pay ₹{b.discounted_fare} directly to {b.driver_name || 'driver'} via UPI or cash upon boarding.
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* SECTION 3: DECLINED (IF ANY) */}
+                      {declinedTrips.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-700 mb-2">
+                            Declined Requests ({declinedTrips.length})
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {declinedTrips.map((b) => (
+                              <div key={b.booking_id} className="bg-slate-50 rounded-2xl border border-slate-200 p-4 text-xs opacity-75">
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="font-bold text-slate-800">{b.source} ➔ {b.destination}</span>
+                                  <span className="text-rose-700 font-bold bg-rose-50 px-2 py-0.5 rounded">Declined</span>
+                                </div>
+                                <p className="text-[11px] text-slate-400">Carpool was full or cancelled by driver.</p>
+                              </div>
+                            ))}
                           </div>
                         </div>
-
-                        {/* Status Message Footer */}
-                        <div className="text-[11px] pt-1">
-                          {b.booking_status === 'ACCEPTED' && (
-                            <p className="text-emerald-700 font-semibold flex items-center space-x-1">
-                              <span>🎉 Seat confirmed! Pay ₹{b.discounted_fare} directly to the driver via UPI or cash upon boarding.</span>
-                            </p>
-                          )}
-                          {b.booking_status === 'PENDING' && (
-                            <p className="text-amber-700 font-medium">
-                              ⏳ Request sent to driver. You will be confirmed once the driver approves.
-                            </p>
-                          )}
-                          {b.booking_status === 'REJECTED' && (
-                            <p className="text-rose-600 font-medium">
-                              This request was declined due to full seats. Please try booking another carpool!
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 2. DRIVER VIEW (REQUESTS FOR MY CAR) */}
-            {myRidesSubTab === 'driver' && (
-              <div className="space-y-4">
-                <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between">
-                  <div>
-                    <h4 className="font-bold text-sm text-emerald-950 mb-0.5">Driver Approval Dashboard</h4>
-                    <p className="text-[11px] text-emerald-800">
-                      When you accept a request, available car seats automatically decrement in real-time in the database!
-                    </p>
-                  </div>
-                  <span className="text-xs font-extrabold bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded-full">
-                    {bookings.filter(b => b.booking_status === 'PENDING').length} Pending Requests
-                  </span>
+                      )}
+                    </>
+                  )}
                 </div>
+              );
+            })()}
 
-                {bookings.length === 0 ? (
-                  <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
-                    <Users className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-slate-700">No incoming passenger requests yet</p>
-                    <p className="text-xs text-slate-400 mt-1">When students apply for your carpool, their requests appear here for approval.</p>
+            {/* 2. DRIVER VIEW (ONLY REQUESTS FOR MY CAR) */}
+            {myRidesSubTab === 'driver' && (() => {
+              const currentName = currentUser?.username?.toLowerCase() || '';
+              // Filter requests to rides where current user is the driver
+              const myCarRequests = currentUser
+                ? bookings.filter(b => b.driver_name && b.driver_name.toLowerCase() === currentName)
+                : [];
+
+              const hasOfferedRides = currentUser
+                ? rides.some(r => r.driver_name.toLowerCase() === currentName)
+                : false;
+
+              return (
+                <div className="space-y-4">
+                  <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 text-xs text-emerald-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h4 className="font-bold text-sm text-emerald-950 mb-0.5">
+                        Driver Inbox: Requests for Your Car
+                      </h4>
+                      <p className="text-[11px] text-emerald-800">
+                        {currentUser 
+                          ? `Showing booking requests sent by classmates specifically for ${currentUser.username}'s car.`
+                          : 'Please login to see requests for your carpool.'}
+                      </p>
+                    </div>
+                    {myCarRequests.filter(b => b.booking_status === 'PENDING').length > 0 && (
+                      <span className="text-xs font-extrabold bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded-full shrink-0">
+                        {myCarRequests.filter(b => b.booking_status === 'PENDING').length} Pending Requests
+                      </span>
+                    )}
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {bookings.map((b) => (
-                      <div 
-                        key={b.booking_id}
-                        className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between"
+
+                  {!currentUser ? (
+                    <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+                      <Lock className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm font-semibold text-slate-700">Login to manage requests for your car</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthMode('login');
+                          setShowAuthModal(true);
+                        }}
+                        className="mt-3 px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl"
                       >
-                        <div>
-                          {/* Header */}
-                          <div className="flex items-start justify-between mb-3 border-b border-slate-100 pb-3">
-                            <div>
-                              <div className="font-bold text-slate-900 text-sm flex items-center space-x-1.5">
-                                <User className="w-4 h-4 text-emerald-600" />
-                                <span>{b.passenger_name}</span>
+                        Login as Driver
+                      </button>
+                    </div>
+                  ) : !hasOfferedRides ? (
+                    <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+                      <Car className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm font-semibold text-slate-700">You haven't offered any carpool rides yet</p>
+                      <p className="text-xs text-slate-400 mt-1 mb-4">
+                        When you post an offer ride, only then will student requests for your car appear here!
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('offer')}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
+                      >
+                        + Offer a Carpool Ride Now
+                      </button>
+                    </div>
+                  ) : myCarRequests.length === 0 ? (
+                    <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+                      <Users className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm font-semibold text-slate-700">No incoming passenger requests for your car yet</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Your ride is live! When classmates apply to rent seats, they will appear right here for your approval.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {myCarRequests.map((b) => (
+                        <div 
+                          key={b.booking_id}
+                          className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex items-start justify-between mb-3 border-b border-slate-100 pb-3">
+                              <div>
+                                <div className="font-bold text-slate-900 text-sm flex items-center space-x-1.5">
+                                  <User className="w-4 h-4 text-emerald-600" />
+                                  <span>{b.passenger_name}</span>
+                                </div>
+                                <div className="text-[11px] text-slate-500 flex items-center space-x-1 mt-0.5">
+                                  <Phone className="w-3 h-3 text-slate-400" />
+                                  <span>{b.passenger_phone}</span>
+                                </div>
                               </div>
-                              <div className="text-[11px] text-slate-500 flex items-center space-x-1 mt-0.5">
-                                <Phone className="w-3 h-3 text-slate-400" />
-                                <span>{b.passenger_phone}</span>
-                              </div>
+
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                b.booking_status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' :
+                                b.booking_status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
+                                'bg-rose-100 text-rose-800'
+                              }`}>
+                                {b.booking_status === 'ACCEPTED' ? 'Confirmed' :
+                                 b.booking_status === 'PENDING' ? 'Pending Your Approval' : 'Declined'}
+                              </span>
                             </div>
 
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              b.booking_status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' :
-                              b.booking_status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
-                              'bg-rose-100 text-rose-800'
-                            }`}>
-                              {b.booking_status === 'ACCEPTED' ? 'Confirmed' :
-                               b.booking_status === 'PENDING' ? 'Pending Approval' : 'Declined'}
-                            </span>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-1.5 mb-4">
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Route Requested:</span>
+                                <span className="font-semibold text-slate-800">{b.source} ➔ {b.destination}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Seats Requested:</span>
+                                <span className="font-bold text-slate-900">{b.seats_requested} seat(s)</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Fare to Collect:</span>
+                                <span className="font-black text-emerald-700 text-sm">₹{b.discounted_fare}</span>
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Request Details */}
-                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-1.5 mb-4">
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">Route Requested:</span>
-                              <span className="font-semibold text-slate-800">{b.source} ➔ {b.destination}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">Seats Requested:</span>
-                              <span className="font-bold text-slate-900">{b.seats_requested} seat(s)</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">Fare to Collect:</span>
-                              <span className="font-black text-emerald-700 text-sm">₹{b.discounted_fare}</span>
-                            </div>
+                          <div>
+                            {b.booking_status === 'PENDING' ? (
+                              <div className="flex space-x-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAcceptRequest(b.booking_id)}
+                                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer active:scale-95 flex items-center justify-center space-x-1"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Accept Request</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRejectRequest(b.booking_id)}
+                                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer active:scale-95"
+                                >
+                                  Decline
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="text-center py-1 text-xs text-slate-500 font-medium">
+                                {b.booking_status === 'ACCEPTED' ? '✅ You confirmed this booking' : '❌ You declined this request'}
+                              </div>
+                            )}
                           </div>
                         </div>
-
-                        {/* Action Buttons */}
-                        <div>
-                          {b.booking_status === 'PENDING' ? (
-                            <div className="flex space-x-2">
-                              <button
-                                type="button"
-                                onClick={() => handleAcceptRequest(b.booking_id)}
-                                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer active:scale-95 flex items-center justify-center space-x-1"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>Accept Request</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRejectRequest(b.booking_id)}
-                                className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer active:scale-95"
-                              >
-                                Decline
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="text-center py-1 text-xs text-slate-400 font-medium">
-                              {b.booking_status === 'ACCEPTED' ? '✅ You accepted this request' : '❌ You declined this request'}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
       </main>

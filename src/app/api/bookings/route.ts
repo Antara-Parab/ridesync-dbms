@@ -12,8 +12,9 @@ export async function GET(req: NextRequest) {
         b.booking_id,
         b.ride_id,
         b.passenger_id,
-        p.full_name AS passenger_name,
+        COALESCE(p.username, p.full_name) AS passenger_name,
         p.phone AS passenger_phone,
+        COALESCE(d.username, d.full_name) AS driver_name,
         r.source,
         r.destination,
         r.departure_time,
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest) {
       FROM Bookings b
       JOIN Rides r ON b.ride_id = r.ride_id
       JOIN Users p ON b.passenger_id = p.user_id
+      JOIN Users d ON r.driver_id = d.user_id
       ORDER BY b.booking_id DESC
     `);
 
@@ -63,7 +65,16 @@ export async function POST(req: NextRequest) {
     const seatsReq = Number(seats_requested) || 1;
     const hasDiscount = Boolean(apply_student_discount);
 
-    // Find the target ride
+    // Find the target ride (check DB or mock)
+    let driverName = 'Aarav Sharma';
+    const dbRide = await query<any[]>('SELECT r.*, COALESCE(u.username, u.full_name) as driver_name FROM Rides r JOIN Users u ON r.driver_id = u.user_id WHERE r.ride_id = ?', [rideId]);
+    if (dbRide && dbRide.length > 0) {
+      driverName = dbRide[0].driver_name;
+    } else {
+      const mockRide = mockDb.rides.find(r => r.ride_id === rideId);
+      if (mockRide) driverName = mockRide.driver_name;
+    }
+
     const ride = mockDb.rides.find(r => r.ride_id === rideId);
     const unitPrice = ride ? Number(ride.cost_per_seat) : 40.0;
 
@@ -72,17 +83,25 @@ export async function POST(req: NextRequest) {
     const discountAmount = hasDiscount ? Number((baseFare * 0.10).toFixed(2)) : 0;
     const finalFare = Number((baseFare - discountAmount).toFixed(2));
 
+    // Try finding passenger ID from DB
+    let passengerId = 4;
+    const pRows = await query<any[]>('SELECT user_id FROM Users WHERE LOWER(username) = LOWER(?) OR LOWER(full_name) = LOWER(?)', [passenger_name, passenger_name]);
+    if (pRows && pRows.length > 0) {
+      passengerId = pRows[0].user_id;
+    }
+
     // Try MySQL insert
     await query(
       `INSERT INTO Bookings (ride_id, passenger_id, seats_requested, booking_status)
-       VALUES (?, 4, ?, 'PENDING')`,
-      [rideId, seatsReq]
+       VALUES (?, ?, ?, 'PENDING')`,
+      [rideId, passengerId, seatsReq]
     );
 
     const newBooking: MockBooking = {
       booking_id: mockDb.bookings.length + 1,
       ride_id: rideId,
-      passenger_id: 4,
+      driver_name: driverName,
+      passenger_id: passengerId,
       passenger_name: passenger_name || 'VESIT Student',
       passenger_phone: passenger_phone || '9820445566',
       source: ride?.source || 'Chembur',
@@ -101,7 +120,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Booking request sent to driver! Total fare: ₹${finalFare} (${hasDiscount ? '10% Student Discount Applied' : 'Standard Rate'}).`,
+      message: `Booking request sent to driver ${driverName}! Total fare: ₹${finalFare}.`,
       booking: newBooking,
       arithmetic: {
         seats: seatsReq,

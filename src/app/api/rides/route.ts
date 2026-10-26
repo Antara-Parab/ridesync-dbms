@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
       SELECT 
         r.ride_id,
         r.driver_id,
-        u.full_name AS driver_name,
+        COALESCE(u.username, u.full_name) AS driver_name,
         u.phone AS driver_phone,
         v.model AS vehicle_model,
         v.vehicle_number,
@@ -68,11 +68,30 @@ export async function POST(req: NextRequest) {
     const fare = Number(cost_per_seat) || 40.0;
     const seats = Number(available_seats) || 3;
 
+    // Resolve driver_id from DB
+    let driverId = 1;
+    let vehicleId = 1;
+    const uRows = await query<any[]>('SELECT user_id FROM Users WHERE username = ? OR full_name = ?', [driver_name, driver_name]);
+    if (uRows && uRows.length > 0) {
+      driverId = uRows[0].user_id;
+      // Resolve or insert vehicle for this driver
+      const vRows = await query<any[]>('SELECT vehicle_id FROM Vehicles WHERE driver_id = ?', [driverId]);
+      if (vRows && vRows.length > 0) {
+        vehicleId = vRows[0].vehicle_id;
+      } else {
+        const vRes: any = await query(
+          'INSERT INTO Vehicles (driver_id, model, vehicle_number, total_seats) VALUES (?, ?, ?, ?)',
+          [driverId, vehicle_model || 'Personal Car', vehicle_number || 'MH-01-XX-0000', seats + 1]
+        );
+        if (vRes?.insertId) vehicleId = vRes.insertId;
+      }
+    }
+
     // Try MySQL insert if connected
     const dbRes: any = await query(
       `INSERT INTO Rides (driver_id, vehicle_id, source, destination, ride_date, departure_time, available_seats, cost_per_seat, status)
-       VALUES (1, 1, ?, ?, CURDATE(), ?, ?, ?, 'ACTIVE')`,
-      [source, destination, departure_time, seats, fare]
+       VALUES (?, ?, ?, ?, CURDATE(), ?, ?, ?, 'ACTIVE')`,
+      [driverId, vehicleId, source, destination, departure_time, seats, fare]
     );
 
     const newRideId = dbRes?.insertId || (mockDb.rides.length + 1);
@@ -80,7 +99,7 @@ export async function POST(req: NextRequest) {
     // Save in memory store as well
     const newRide: MockRide = {
       ride_id: newRideId,
-      driver_id: 1,
+      driver_id: driverId,
       driver_name: driver_name || 'Student Driver',
       driver_phone: driver_phone || '9820112233',
       vehicle_model: vehicle_model || 'Personal Car',

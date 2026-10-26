@@ -23,6 +23,7 @@ export interface MockRide {
 export interface MockBooking {
   booking_id: number;
   ride_id: number;
+  driver_name: string;
   passenger_id: number;
   passenger_name: string;
   passenger_phone: string;
@@ -122,6 +123,7 @@ export const mockDb = {
     {
       booking_id: 1,
       ride_id: 1,
+      driver_name: 'Aarav Sharma',
       passenger_id: 4,
       passenger_name: 'Ananya Iyer',
       passenger_phone: '9820445566',
