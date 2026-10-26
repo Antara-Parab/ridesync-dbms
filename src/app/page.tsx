@@ -141,63 +141,6 @@ export default function CampusPoolApp() {
     }
   };
 
-  // Demo Accounts (7 College Logins)
-  const demoAccounts = [
-    { username: 'tanmay', name: 'Tanmay', full_name: 'Tanmay Shinde', id: 60003, pass: '123', color: 'bg-slate-900 text-white hover:bg-slate-800' },
-    { username: 'antara', name: 'Antara', full_name: 'Antara Parab', id: 60004, pass: '123', color: 'bg-emerald-600 text-white hover:bg-emerald-500' },
-    { username: 'tanvi', name: 'Tanvi', full_name: 'Tanvi Sawant', id: 90002, pass: '123', color: 'bg-pink-600 text-white hover:bg-pink-500' },
-    { username: 'siddhi', name: 'Siddhi', full_name: 'Siddhi Patil', id: 90003, pass: '123', color: 'bg-purple-600 text-white hover:bg-purple-500' },
-    { username: 'aditi', name: 'Aditi', full_name: 'Aditi Sharma', id: 90004, pass: '123', color: 'bg-amber-600 text-white hover:bg-amber-500' },
-    { username: 'arjun', name: 'Arjun', full_name: 'Arjun Mehta', id: 90005, pass: '123', color: 'bg-blue-600 text-white hover:bg-blue-500' },
-    { username: 'aryan', name: 'Aryan', full_name: 'Aryan Joshi', id: 90006, pass: '123', color: 'bg-teal-600 text-white hover:bg-teal-500' },
-  ];
-
-  // Quick 1-Click Login Handler
-  const handleQuickLogin = async (username: string, pass: string) => {
-    setAuthLoading(true);
-    const cleanUser = username.toLowerCase();
-    const fallbackMatch = demoAccounts.find(a => a.username === cleanUser);
-    const fallbackUser: AuthUser = {
-      user_id: fallbackMatch ? fallbackMatch.id : 60003,
-      username: cleanUser,
-      full_name: fallbackMatch ? fallbackMatch.full_name : username,
-    };
-
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password: pass }),
-      });
-      const data = await res.json();
-      if (data.success && data.user) {
-        setCurrentUser(data.user);
-        setPassengerNameInput(data.user.username);
-        setNewRideForm(prev => ({ ...prev, driver_name: data.user.username }));
-        localStorage.setItem('campuspool_user', JSON.stringify(data.user));
-        setShowAuthModal(false);
-        showToast(`✅ Logged in as ${data.user.full_name || data.user.username}!`, 'success');
-      } else {
-        // Fallback to local login if offline
-        setCurrentUser(fallbackUser);
-        setPassengerNameInput(cleanUser);
-        setNewRideForm(prev => ({ ...prev, driver_name: cleanUser }));
-        localStorage.setItem('campuspool_user', JSON.stringify(fallbackUser));
-        setShowAuthModal(false);
-        showToast(`✅ Logged in as ${fallbackUser.full_name}!`, 'success');
-      }
-    } catch {
-      setCurrentUser(fallbackUser);
-      setPassengerNameInput(cleanUser);
-      setNewRideForm(prev => ({ ...prev, driver_name: cleanUser }));
-      localStorage.setItem('campuspool_user', JSON.stringify(fallbackUser));
-      setShowAuthModal(false);
-      showToast(`✅ Logged in as ${fallbackUser.full_name}!`, 'success');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
   // Regular Auth Form Submit
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -513,59 +456,6 @@ export default function CampusPoolApp() {
 
       {/* Main Content Area */}
       <main className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 flex-1 space-y-6">
-        {/* ========================================================================= */}
-        {/* 1-CLICK QUICK LOGIN BANNER (7 COLLEGE LOGINS) */}
-        {/* ========================================================================= */}
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                <Zap className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="font-bold text-xs sm:text-sm text-slate-900">
-                  {currentUser ? `Logged in: ${currentUser.username} (${currentUser.full_name})` : '1-Click Demo Access (7 College Logins)'}
-                </p>
-                <p className="text-[11px] text-slate-500">
-                  {currentUser ? 'Click any classmate below to instantly switch account:' : 'Click any student to log in instantly (Password: 123 for all):'}
-                </p>
-              </div>
-            </div>
-
-            {currentUser && (
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="text-xs text-rose-600 hover:text-rose-700 font-semibold self-start sm:self-auto cursor-pointer"
-              >
-                Logout
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
-            {demoAccounts.map(acc => {
-              const isCurrent = currentUser?.username.toLowerCase() === acc.username.toLowerCase();
-              return (
-                <button
-                  key={acc.username}
-                  type="button"
-                  onClick={() => handleQuickLogin(acc.username, acc.pass)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5 cursor-pointer active:scale-95 ${
-                    isCurrent 
-                      ? 'ring-2 ring-emerald-500 ring-offset-1 ' + acc.color
-                      : acc.color
-                  }`}
-                >
-                  <User className="w-3 h-3 opacity-80" />
-                  <span>{acc.name}</span>
-                  {isCurrent && <span className="text-[10px] bg-white/20 px-1 rounded">Active</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* ========================================================================= */}
         {/* TAB 1: FIND RIDES (PASSENGER) */}
         {/* ========================================================================= */}
@@ -1465,23 +1355,6 @@ export default function CampusPoolApp() {
               >
                 <X className="w-5 h-5" />
               </button>
-            </div>
-
-            {/* Quick 1-Click Buttons */}
-            <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-              <p className="text-[10px] font-bold text-slate-400 uppercase text-center">1-Click Instant Login (Pass: 123)</p>
-              <div className="flex flex-wrap gap-1.5 justify-center">
-                {demoAccounts.map(acc => (
-                  <button
-                    key={acc.username}
-                    type="button"
-                    onClick={() => handleQuickLogin(acc.username, acc.pass)}
-                    className={`py-1 px-2.5 rounded-lg text-xs font-bold transition cursor-pointer active:scale-95 ${acc.color}`}
-                  >
-                    {acc.name}
-                  </button>
-                ))}
-              </div>
             </div>
 
             <div className="flex bg-slate-100 p-1 rounded-xl mb-4 text-xs">
