@@ -249,9 +249,9 @@ export default function CampusPoolApp() {
       setNewRideForm(prev => ({ ...prev, cost_per_seat: '' }));
       return;
     }
-    const num = parseInt(val, 10);
+    const num = parseFloat(val);
     if (!isNaN(num) && num >= 0) {
-      setNewRideForm(prev => ({ ...prev, cost_per_seat: num }));
+      setNewRideForm(prev => ({ ...prev, cost_per_seat: val }));
     }
   };
 
@@ -1011,7 +1011,7 @@ export default function CampusPoolApp() {
                     <input
                       type="number"
                       min="0"
-                      step="5"
+                      step="any"
                       required
                       placeholder="0"
                       value={newRideForm.cost_per_seat}
