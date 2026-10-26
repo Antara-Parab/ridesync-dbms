@@ -78,13 +78,69 @@ export default function CampusPoolApp() {
     driver_name: '',
     driver_phone: '9820112233',
     vehicle_model: 'Hyundai i20',
-    vehicle_number: 'MH-01-AB-1234',
+    vehicle_number: '',
     source: '',
     destination: 'VESIT Campus',
     departure_time: '08:15 AM',
     available_seats: 3,
     cost_per_seat: 40,
   });
+
+  // Automatically format Indian Vehicle Number Plate: e.g. MH-01-AB-1234
+  const formatVehicleNumber = (val: string): string => {
+    const clean = val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    if (!clean) return '';
+
+    let res = '';
+    // Part 1: State code (up to 2 letters, e.g. MH, DL, KA)
+    let i = 0;
+    while (i < clean.length && i < 2 && /[A-Z]/.test(clean[i])) {
+      res += clean[i];
+      i++;
+    }
+    if (i >= clean.length) return res;
+
+    res += '-';
+    // Part 2: RTO digits (up to 2 digits, e.g. 01, 02)
+    let rtoCount = 0;
+    while (i < clean.length && rtoCount < 2 && /[0-9]/.test(clean[i])) {
+      res += clean[i];
+      i++;
+      rtoCount++;
+    }
+    if (i >= clean.length) return res;
+
+    res += '-';
+    // Part 3: Series letters (up to 2 letters, e.g. AB, TS, AP)
+    let seriesCount = 0;
+    while (i < clean.length && seriesCount < 2 && /[A-Z]/.test(clean[i])) {
+      res += clean[i];
+      i++;
+      seriesCount++;
+    }
+    if (i >= clean.length) return res;
+
+    res += '-';
+    // Part 4: 4 digits (e.g. 1234)
+    let numCount = 0;
+    while (i < clean.length && numCount < 4 && /[0-9]/.test(clean[i])) {
+      res += clean[i];
+      i++;
+      numCount++;
+    }
+
+    return res;
+  };
+
+  const handleVehicleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputVal = e.target.value;
+    let raw = inputVal;
+    if (newRideForm.vehicle_number.endsWith('-') && inputVal === newRideForm.vehicle_number.slice(0, -1)) {
+      raw = inputVal.slice(0, -1);
+    }
+    const formatted = formatVehicleNumber(raw);
+    setNewRideForm(prev => ({ ...prev, vehicle_number: formatted }));
+  };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -276,7 +332,7 @@ export default function CampusPoolApp() {
           driver_name: currentUser?.username || '',
           driver_phone: '9820112233',
           vehicle_model: 'Hyundai i20',
-          vehicle_number: 'MH-01-AB-1234',
+          vehicle_number: '',
           source: '',
           destination: 'VESIT Campus',
           departure_time: '08:15 AM',
@@ -750,10 +806,11 @@ export default function CampusPoolApp() {
                     <input
                       type="text"
                       placeholder="e.g. MH-01-AB-1234"
+                      maxLength={14}
                       required
                       value={newRideForm.vehicle_number}
-                      onChange={(e) => setNewRideForm({ ...newRideForm, vehicle_number: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      onChange={handleVehicleNumberChange}
+                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono tracking-wider font-semibold placeholder:font-sans placeholder:tracking-normal placeholder:font-normal"
                     />
                   </div>
                 </div>
