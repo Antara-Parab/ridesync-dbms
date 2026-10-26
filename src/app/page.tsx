@@ -6,7 +6,7 @@ import {
   AlertCircle, Search, PlusCircle, Check, X, 
   ArrowRight, ShieldCheck, Tag, Sparkles, Phone,
   TrendingDown, CheckSquare, Square, LogIn, UserPlus,
-  LogOut, User, Lock, ChevronRight, Zap
+  LogOut, User, Lock, ChevronRight, Zap, Trash2
 } from 'lucide-react';
 
 interface Ride {
@@ -323,6 +323,23 @@ export default function CampusPoolApp() {
       }
     } catch {
       showToast('Action failed', 'error');
+    }
+  };
+
+  // Clear All Bookings (Admin / Demo Reset)
+  const handleClearAllBookings = async () => {
+    try {
+      const res = await fetch('/api/bookings', { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Cleaned! All test bookings cleared from database.', 'success');
+        fetchBookings();
+        fetchRides();
+      } else {
+        showToast(data.error || 'Failed to clear bookings', 'error');
+      }
+    } catch {
+      showToast('Network error while clearing bookings', 'error');
     }
   };
 
@@ -825,59 +842,100 @@ export default function CampusPoolApp() {
         {activeTab === 'bookings' && (
           <div className="space-y-5">
             {/* Clean Sub-tab Navigation */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200">
-              <div className="flex space-x-1.5 bg-slate-100 p-1 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setMyRidesSubTab('passenger')}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 ${
-                    myRidesSubTab === 'passenger'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <span>🎒 Trips I Booked</span>
-                  <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-full font-bold">
-                    {bookings.length}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMyRidesSubTab('driver')}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 ${
-                    myRidesSubTab === 'driver'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <span>🚗 Requests for My Car</span>
-                  {bookings.filter(b => b.booking_status === 'PENDING').length > 0 && (
-                    <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-bold animate-pulse">
-                      {bookings.filter(b => b.booking_status === 'PENDING').length} new
-                    </span>
-                  )}
-                </button>
-              </div>
+            {(() => {
+              const currentName = (currentUser?.username || '').toLowerCase();
+              const myBookingsCount = currentUser
+                ? bookings.filter(b => (b.passenger_name || '').toLowerCase() === currentName).length
+                : 0;
+              const myPendingDriverRequestsCount = currentUser
+                ? bookings.filter(b => (b.driver_name || '').toLowerCase() === currentName && b.booking_status === 'PENDING').length
+                : 0;
 
-              <button
-                type="button"
-                onClick={() => {
-                  fetchBookings();
-                  showToast('Updated your rides list from database', 'info');
-                }}
-                className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold cursor-pointer self-end sm:self-auto"
-              >
-                ↻ Refresh Status
-              </button>
-            </div>
+              return (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200">
+                  <div className="flex space-x-1.5 bg-slate-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setMyRidesSubTab('passenger')}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+                        myRidesSubTab === 'passenger'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <span>🎒 Trips I Booked</span>
+                      <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-full font-bold">
+                        {myBookingsCount}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMyRidesSubTab('driver')}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+                        myRidesSubTab === 'driver'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <span>🚗 Requests for My Car</span>
+                      {myPendingDriverRequestsCount > 0 && (
+                        <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-bold animate-pulse">
+                          {myPendingDriverRequestsCount} new
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center space-x-2.5 self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={handleClearAllBookings}
+                      className="text-xs text-rose-600 hover:text-rose-700 font-semibold cursor-pointer flex items-center space-x-1 px-2.5 py-1 rounded-lg hover:bg-rose-50 transition"
+                      title="Clear all test bookings from database"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Clear Bookings</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fetchBookings();
+                        showToast('Updated rides list from database', 'info');
+                      }}
+                      className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold cursor-pointer px-2.5 py-1 rounded-lg hover:bg-emerald-50 transition"
+                    >
+                      ↻ Refresh Status
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* 1. PASSENGER VIEW (TRIPS I BOOKED - SPLIT INTO PENDING & CONFIRMED) */}
             {myRidesSubTab === 'passenger' && (() => {
-              const currentName = currentUser?.username?.toLowerCase() || '';
-              // Filter to current user's booked trips if logged in
-              const userTrips = currentUser
-                ? bookings.filter(b => b.passenger_name.toLowerCase() === currentName)
-                : bookings;
+              const currentName = (currentUser?.username || '').toLowerCase();
+              if (!currentUser) {
+                return (
+                  <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+                    <Car className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-slate-700">Please login to view your booked rides</p>
+                    <p className="text-xs text-slate-400 mt-1 mb-4">Log in to view pending and confirmed carpool seats.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('login');
+                        setShowAuthModal(true);
+                      }}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
+                    >
+                      Login Now
+                    </button>
+                  </div>
+                );
+              }
+
+              // Filter to current user's booked trips safely
+              const userTrips = bookings.filter(b => (b.passenger_name || '').toLowerCase() === currentName);
 
               const pendingTrips = userTrips.filter(b => b.booking_status === 'PENDING');
               const confirmedTrips = userTrips.filter(b => b.booking_status === 'ACCEPTED');
@@ -1047,14 +1105,14 @@ export default function CampusPoolApp() {
 
             {/* 2. DRIVER VIEW (ONLY REQUESTS FOR MY CAR) */}
             {myRidesSubTab === 'driver' && (() => {
-              const currentName = currentUser?.username?.toLowerCase() || '';
+              const currentName = (currentUser?.username || '').toLowerCase();
               // Filter requests to rides where current user is the driver
               const myCarRequests = currentUser
-                ? bookings.filter(b => b.driver_name && b.driver_name.toLowerCase() === currentName)
+                ? bookings.filter(b => (b.driver_name || '').toLowerCase() === currentName)
                 : [];
 
               const hasOfferedRides = currentUser
-                ? rides.some(r => r.driver_name.toLowerCase() === currentName)
+                ? rides.some(r => (r.driver_name || '').toLowerCase() === currentName)
                 : false;
 
               return (

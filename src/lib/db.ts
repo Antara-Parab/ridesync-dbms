@@ -119,26 +119,7 @@ export const mockDb = {
     },
   ] as MockRide[],
 
-  bookings: [
-    {
-      booking_id: 1,
-      ride_id: 1,
-      driver_name: 'Aarav Sharma',
-      passenger_id: 4,
-      passenger_name: 'Ananya Iyer',
-      passenger_phone: '9820445566',
-      source: 'Chembur Naka',
-      destination: 'VESIT Campus',
-      departure_time: '08:15 AM',
-      cost_per_seat: 40.0,
-      seats_requested: 1,
-      has_student_discount: true,
-      total_fare: 40.0,
-      discounted_fare: 36.0,
-      booking_status: 'ACCEPTED',
-      booked_at: '2026-10-26 07:30 AM',
-    },
-  ] as MockBooking[],
+  bookings: [] as MockBooking[],
 };
 
 export function getDbPool(): mysql.Pool | null {

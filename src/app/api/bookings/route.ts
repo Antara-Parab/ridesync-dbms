@@ -31,12 +31,12 @@ export async function GET(req: NextRequest) {
       ORDER BY b.booking_id DESC
     `);
 
-    if (sqlBookings && Array.isArray(sqlBookings) && sqlBookings.length > 0) {
+    if (sqlBookings !== null && Array.isArray(sqlBookings)) {
       let result = sqlBookings;
       if (rideId) {
         result = result.filter(b => b.ride_id === Number(rideId));
       }
-      return NextResponse.json({ success: true, bookings: result });
+      return NextResponse.json({ success: true, bookings: result, source: 'mysql' });
     }
 
     // 2. Fallback to in-memory store
@@ -44,7 +44,18 @@ export async function GET(req: NextRequest) {
     if (rideId) {
       bookings = bookings.filter(b => b.ride_id === Number(rideId));
     }
-    return NextResponse.json({ success: true, bookings });
+    return NextResponse.json({ success: true, bookings, source: 'local' });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE() {
+  try {
+    await query('DELETE FROM Bookings');
+    await query('UPDATE Rides SET available_seats = 3 WHERE available_seats < 3');
+    mockDb.bookings = [];
+    return NextResponse.json({ success: true, message: 'All bookings cleared from database.' });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
