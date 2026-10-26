@@ -141,9 +141,28 @@ export default function CampusPoolApp() {
     }
   };
 
+  // Demo Accounts (7 College Logins)
+  const demoAccounts = [
+    { username: 'tanmay', name: 'Tanmay', full_name: 'Tanmay Shinde', id: 60003, pass: '123', color: 'bg-slate-900 text-white hover:bg-slate-800' },
+    { username: 'antara', name: 'Antara', full_name: 'Antara Parab', id: 60004, pass: '123', color: 'bg-emerald-600 text-white hover:bg-emerald-500' },
+    { username: 'tanvi', name: 'Tanvi', full_name: 'Tanvi Sawant', id: 90002, pass: '123', color: 'bg-pink-600 text-white hover:bg-pink-500' },
+    { username: 'siddhi', name: 'Siddhi', full_name: 'Siddhi Patil', id: 90003, pass: '123', color: 'bg-purple-600 text-white hover:bg-purple-500' },
+    { username: 'aditi', name: 'Aditi', full_name: 'Aditi Sharma', id: 90004, pass: '123', color: 'bg-amber-600 text-white hover:bg-amber-500' },
+    { username: 'arjun', name: 'Arjun', full_name: 'Arjun Mehta', id: 90005, pass: '123', color: 'bg-blue-600 text-white hover:bg-blue-500' },
+    { username: 'aryan', name: 'Aryan', full_name: 'Aryan Joshi', id: 90006, pass: '123', color: 'bg-teal-600 text-white hover:bg-teal-500' },
+  ];
+
   // Quick 1-Click Login Handler
   const handleQuickLogin = async (username: string, pass: string) => {
     setAuthLoading(true);
+    const cleanUser = username.toLowerCase();
+    const fallbackMatch = demoAccounts.find(a => a.username === cleanUser);
+    const fallbackUser: AuthUser = {
+      user_id: fallbackMatch ? fallbackMatch.id : 60003,
+      username: cleanUser,
+      full_name: fallbackMatch ? fallbackMatch.full_name : username,
+    };
+
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -160,27 +179,17 @@ export default function CampusPoolApp() {
         showToast(`✅ Logged in as ${data.user.full_name || data.user.username}!`, 'success');
       } else {
         // Fallback to local login if offline
-        const fallbackUser: AuthUser = {
-          user_id: username === 'tanmay' ? 60003 : 60004,
-          username,
-          full_name: username === 'tanmay' ? 'Tanmay Shinde' : 'Antara Parab',
-        };
         setCurrentUser(fallbackUser);
-        setPassengerNameInput(username);
-        setNewRideForm(prev => ({ ...prev, driver_name: username }));
+        setPassengerNameInput(cleanUser);
+        setNewRideForm(prev => ({ ...prev, driver_name: cleanUser }));
         localStorage.setItem('campuspool_user', JSON.stringify(fallbackUser));
         setShowAuthModal(false);
         showToast(`✅ Logged in as ${fallbackUser.full_name}!`, 'success');
       }
     } catch {
-      const fallbackUser: AuthUser = {
-        user_id: username === 'tanmay' ? 60003 : 60004,
-        username,
-        full_name: username === 'tanmay' ? 'Tanmay Shinde' : 'Antara Parab',
-      };
       setCurrentUser(fallbackUser);
-      setPassengerNameInput(username);
-      setNewRideForm(prev => ({ ...prev, driver_name: username }));
+      setPassengerNameInput(cleanUser);
+      setNewRideForm(prev => ({ ...prev, driver_name: cleanUser }));
       localStorage.setItem('campuspool_user', JSON.stringify(fallbackUser));
       setShowAuthModal(false);
       showToast(`✅ Logged in as ${fallbackUser.full_name}!`, 'success');
@@ -238,18 +247,28 @@ export default function CampusPoolApp() {
 
   // Open Booking Modal for Any User
   const handleOpenBookingModal = (ride: Ride) => {
+    if (currentUser && ride.driver_name?.toLowerCase() === currentUser.username.toLowerCase()) {
+      showToast('⚠️ You cannot book a seat on your own ride! You are the driver.', 'error');
+      return;
+    }
     setSelectedRide(ride);
     setRequestedSeats(1);
     if (currentUser) {
       setPassengerNameInput(currentUser.username);
     } else if (!passengerNameInput) {
-      setPassengerNameInput('Tanmay');
+      setPassengerNameInput('');
     }
   };
 
   // Student Books a Seat
   const handleConfirmBooking = async () => {
     if (!selectedRide) return;
+
+    if (currentUser && selectedRide.driver_name?.toLowerCase() === currentUser.username.toLowerCase()) {
+      showToast('⚠️ You cannot book a seat on your own ride! You are the driver.', 'error');
+      setSelectedRide(null);
+      return;
+    }
 
     const bookerName = currentUser?.username || passengerNameInput.trim() || 'Student Passenger';
 
@@ -495,42 +514,57 @@ export default function CampusPoolApp() {
       {/* Main Content Area */}
       <main className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 flex-1 space-y-6">
         {/* ========================================================================= */}
-        {/* 1-CLICK QUICK LOGIN BANNER (WHEN NOT LOGGED IN) */}
+        {/* 1-CLICK QUICK LOGIN BANNER (7 COLLEGE LOGINS) */}
         {/* ========================================================================= */}
-        {!currentUser && (
-          <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                <Zap className="w-5 h-5" />
+        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                <Zap className="w-4 h-4" />
               </div>
               <div>
                 <p className="font-bold text-xs sm:text-sm text-slate-900">
-                  Quick Demo Access: 1-Click Login
+                  {currentUser ? `Logged in: ${currentUser.username} (${currentUser.full_name})` : '1-Click Demo Access (7 College Logins)'}
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  No typing required! Click either account to instantly log in:
+                  {currentUser ? 'Click any classmate below to instantly switch account:' : 'Click any student to log in instantly (Password: 123 for all):'}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 shrink-0">
+            {currentUser && (
               <button
                 type="button"
-                onClick={() => handleQuickLogin('tanmay', '123')}
-                className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5 cursor-pointer active:scale-95"
+                onClick={handleLogout}
+                className="text-xs text-rose-600 hover:text-rose-700 font-semibold self-start sm:self-auto cursor-pointer"
               >
-                <span>👤 Login as Tanmay</span>
+                Logout
               </button>
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('antara', '123')}
-                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5 cursor-pointer active:scale-95"
-              >
-                <span>👤 Login as Antara</span>
-              </button>
-            </div>
+            )}
           </div>
-        )}
+
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
+            {demoAccounts.map(acc => {
+              const isCurrent = currentUser?.username.toLowerCase() === acc.username.toLowerCase();
+              return (
+                <button
+                  key={acc.username}
+                  type="button"
+                  onClick={() => handleQuickLogin(acc.username, acc.pass)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5 cursor-pointer active:scale-95 ${
+                    isCurrent 
+                      ? 'ring-2 ring-emerald-500 ring-offset-1 ' + acc.color
+                      : acc.color
+                  }`}
+                >
+                  <User className="w-3 h-3 opacity-80" />
+                  <span>{acc.name}</span>
+                  {isCurrent && <span className="text-[10px] bg-white/20 px-1 rounded">Active</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {/* ========================================================================= */}
         {/* TAB 1: FIND RIDES (PASSENGER) */}
@@ -741,15 +775,22 @@ export default function CampusPoolApp() {
                         </div>
                       </div>
 
-                      {/* Clickable Book Button */}
-                      <button
-                        type="button"
-                        onClick={() => handleOpenBookingModal(ride)}
-                        className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm cursor-pointer active:scale-95"
-                      >
-                        <span>Apply for Seat</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
+                      {/* Clickable Book Button OR Driver Own-Ride Indicator */}
+                      {currentUser && ride.driver_name?.toLowerCase() === currentUser.username.toLowerCase() ? (
+                        <div className="w-full py-2.5 px-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold text-center flex items-center justify-center space-x-1.5">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Your Carpool Ride (You are Driver)</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenBookingModal(ride)}
+                          className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm cursor-pointer active:scale-95"
+                        >
+                          <span>Apply for Seat</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1428,22 +1469,18 @@ export default function CampusPoolApp() {
 
             {/* Quick 1-Click Buttons */}
             <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-              <p className="text-[10px] font-bold text-slate-400 uppercase text-center">1-Click Instant Login</p>
-              <div className="flex space-x-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('tanmay', '123')}
-                  className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition cursor-pointer active:scale-95"
-                >
-                  Tanmay (123)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('antara', '123')}
-                  className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer active:scale-95"
-                >
-                  Antara (123)
-                </button>
+              <p className="text-[10px] font-bold text-slate-400 uppercase text-center">1-Click Instant Login (Pass: 123)</p>
+              <div className="flex flex-wrap gap-1.5 justify-center">
+                {demoAccounts.map(acc => (
+                  <button
+                    key={acc.username}
+                    type="button"
+                    onClick={() => handleQuickLogin(acc.username, acc.pass)}
+                    className={`py-1 px-2.5 rounded-lg text-xs font-bold transition cursor-pointer active:scale-95 ${acc.color}`}
+                  >
+                    {acc.name}
+                  </button>
+                ))}
               </div>
             </div>
 

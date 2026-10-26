@@ -75,6 +75,16 @@ export async function POST(req: NextRequest) {
       if (mockRide) driverName = mockRide.driver_name;
     }
 
+    // Validation: Driver cannot book their own ride
+    const cleanPassenger = (passenger_name || '').trim().toLowerCase();
+    const cleanDriver = (driverName || '').trim().toLowerCase();
+    if (cleanPassenger && cleanDriver && cleanPassenger === cleanDriver) {
+      return NextResponse.json({
+        success: false,
+        error: 'You cannot book a seat on your own ride! You are the driver.',
+      }, { status: 400 });
+    }
+
     const ride = mockDb.rides.find(r => r.ride_id === rideId);
     const unitPrice = ride ? Number(ride.cost_per_seat) : 40.0;
 
