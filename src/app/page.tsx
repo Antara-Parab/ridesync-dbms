@@ -269,6 +269,29 @@ export default function CampusPoolApp() {
     }
   };
 
+  // User Preset for Ride Offers (e.g. Tanmay: Honda Amaze, MH-04-KR-9798, Thane -> VESIT Campus, 07:30, 1 seat, ₹67)
+  const applyUserPreset = (username: string) => {
+    const clean = username.trim().toLowerCase();
+    if (clean === 'tanmay') {
+      setNewRideForm({
+        driver_name: 'Tanmay',
+        driver_phone: '9820112233',
+        vehicle_model: 'Honda Amaze',
+        vehicle_number: 'MH-04-KR-9798',
+        source: 'Thane',
+        destination: 'VESIT Campus',
+        departure_time: '07:30',
+        available_seats: 1,
+        cost_per_seat: 67,
+      });
+    } else {
+      setNewRideForm(prev => ({
+        ...prev,
+        driver_name: username,
+      }));
+    }
+  };
+
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 5000);
@@ -281,8 +304,10 @@ export default function CampusPoolApp() {
       try {
         const parsed = JSON.parse(savedUser);
         setCurrentUser(parsed);
-        setPassengerNameInput(parsed.username);
-        setNewRideForm(prev => ({ ...prev, driver_name: parsed.username }));
+        if (parsed?.username) {
+          setPassengerNameInput(parsed.username);
+          applyUserPreset(parsed.username);
+        }
       } catch {
         localStorage.removeItem('campuspool_user');
       }
@@ -349,7 +374,7 @@ export default function CampusPoolApp() {
       if (data.success && data.user) {
         setCurrentUser(data.user);
         setPassengerNameInput(data.user.username);
-        setNewRideForm(prev => ({ ...prev, driver_name: data.user.username }));
+        applyUserPreset(data.user.username);
         localStorage.setItem('campuspool_user', JSON.stringify(data.user));
         setShowAuthModal(false);
         showToast(data.message, 'success');
@@ -368,6 +393,17 @@ export default function CampusPoolApp() {
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('campuspool_user');
+    setNewRideForm({
+      driver_name: '',
+      driver_phone: '9820112233',
+      vehicle_model: 'Hyundai i20',
+      vehicle_number: '',
+      source: '',
+      destination: 'VESIT Campus',
+      departure_time: '',
+      available_seats: 3,
+      cost_per_seat: 40,
+    });
     showToast('Logged out successfully', 'info');
   };
 
@@ -470,17 +506,21 @@ export default function CampusPoolApp() {
       const data = await res.json();
       if (data.success) {
         showToast('🎉 Your carpool ride has been published to the database!', 'success');
-        setNewRideForm({
-          driver_name: currentUser?.username || '',
-          driver_phone: '9820112233',
-          vehicle_model: 'Hyundai i20',
-          vehicle_number: '',
-          source: '',
-          destination: 'VESIT Campus',
-          departure_time: '',
-          available_seats: 3,
-          cost_per_seat: 40,
-        });
+        if (currentUser?.username) {
+          applyUserPreset(currentUser.username);
+        } else {
+          setNewRideForm({
+            driver_name: '',
+            driver_phone: '9820112233',
+            vehicle_model: 'Hyundai i20',
+            vehicle_number: '',
+            source: '',
+            destination: 'VESIT Campus',
+            departure_time: '',
+            available_seats: 3,
+            cost_per_seat: 40,
+          });
+        }
         fetchRides();
         setActiveTab('find');
       } else {
