@@ -150,20 +150,23 @@ export async function DELETE(req: NextRequest) {
 
     const idNum = Number(rideId);
 
-    // 1. Fetch vehicle_id associated with this ride before deleting the ride
+    // 1. Fetch vehicle_id associated with this ride
     const rRows = await query<any[]>('SELECT vehicle_id FROM Rides WHERE ride_id = ?', [idNum]);
     const vehicleId = rRows && rRows.length > 0 ? rRows[0].vehicle_id : null;
 
-    // 2. Delete associated bookings and the ride from MySQL
-    await query('DELETE FROM Bookings WHERE ride_id = ?', [idNum]);
-    await query('DELETE FROM Rides WHERE ride_id = ?', [idNum]);
-
-    // 3. Delete vehicle from Vehicles table if no other active rides are using it
     if (vehicleId) {
-      const otherRides = await query<any[]>('SELECT ride_id FROM Rides WHERE vehicle_id = ?', [vehicleId]);
-      if (!otherRides || otherRides.length === 0) {
+      // Check if any other ride is using this vehicle
+      const otherRides = await query<any[]>('SELECT ride_id FROM Rides WHERE vehicle_id = ? AND ride_id != ? LIMIT 1', [vehicleId, idNum]);
+      const canDeleteVehicle = !otherRides || otherRides.length === 0;
+
+      if (canDeleteVehicle) {
+        // Deleting from Vehicles cascades to delete the ride and all its bookings in a single statement
         await query('DELETE FROM Vehicles WHERE vehicle_id = ?', [vehicleId]);
+      } else {
+        await query('DELETE FROM Bookings WHERE ride_id = ?; DELETE FROM Rides WHERE ride_id = ?', [idNum, idNum]);
       }
+    } else {
+      await query('DELETE FROM Bookings WHERE ride_id = ?; DELETE FROM Rides WHERE ride_id = ?', [idNum, idNum]);
     }
 
     // 4. Remove from mockDb

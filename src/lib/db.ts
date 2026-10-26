@@ -39,6 +39,10 @@ export interface MockBooking {
   booked_at: string;
 }
 
+declare global {
+  var _mysqlPool: mysql.Pool | undefined;
+}
+
 // In-memory store for instant zero-config Vercel deployment
 export const mockDb = {
   rides: [] as MockRide[],
@@ -47,7 +51,7 @@ export const mockDb = {
 
 export function getDbPool(): mysql.Pool | null {
   if (process.env.MYSQL_HOST) {
-    if (!pool) {
+    if (!globalThis._mysqlPool) {
       try {
         const host = process.env.MYSQL_HOST;
         const port = Number(process.env.MYSQL_PORT) || 3306;
@@ -56,7 +60,7 @@ export function getDbPool(): mysql.Pool | null {
         const database = process.env.MYSQL_DATABASE || 'ridesync_db';
         const sslRequired = process.env.MYSQL_SSL === 'true' || process.env.MYSQL_SSL === '1';
 
-        pool = mysql.createPool({
+        globalThis._mysqlPool = mysql.createPool({
           host,
           port,
           user,
@@ -64,6 +68,10 @@ export function getDbPool(): mysql.Pool | null {
           database,
           waitForConnections: true,
           connectionLimit: 10,
+          maxIdle: 10,
+          idleTimeout: 60000,
+          enableKeepAlive: true,
+          keepAliveInitialDelay: 10000,
           queueLimit: 0,
           multipleStatements: true,
           dateStrings: true,
@@ -74,7 +82,7 @@ export function getDbPool(): mysql.Pool | null {
         return null;
       }
     }
-    return pool;
+    return globalThis._mysqlPool;
   }
   return null;
 }

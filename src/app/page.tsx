@@ -6,7 +6,7 @@ import {
   AlertCircle, Search, PlusCircle, Check, X, 
   ArrowRight, ShieldCheck, Tag, Sparkles, Phone,
   TrendingDown, CheckSquare, Square, LogIn, UserPlus,
-  LogOut, User, Lock, ChevronRight, Zap, Trash2
+  LogOut, User, Lock, ChevronRight, Zap, Trash2, Loader2
 } from 'lucide-react';
 
 interface Ride {
@@ -53,6 +53,9 @@ export default function CampusPoolApp() {
   const [authPassword, setAuthPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isSubmittingRide, setIsSubmittingRide] = useState(false);
+  const [isBookingSeat, setIsBookingSeat] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<number | string | null>(null);
 
   // App tabs: 'find' | 'offer' | 'bookings'
   const [activeTab, setActiveTab] = useState<'find' | 'offer' | 'bookings'>('find');
@@ -433,6 +436,7 @@ export default function CampusPoolApp() {
     }
 
     const bookerName = currentUser?.username || passengerNameInput.trim() || 'Student Passenger';
+    setIsBookingSeat(true);
 
     try {
       const res = await fetch('/api/bookings', {
@@ -460,6 +464,8 @@ export default function CampusPoolApp() {
       }
     } catch {
       showToast('Network error, please try again.', 'error');
+    } finally {
+      setIsBookingSeat(false);
     }
   };
 
@@ -490,6 +496,7 @@ export default function CampusPoolApp() {
     }
 
     const fareNum = newRideForm.cost_per_seat === '' ? 0 : Number(newRideForm.cost_per_seat);
+    setIsSubmittingRide(true);
 
     try {
       const res = await fetch('/api/rides', {
@@ -528,11 +535,17 @@ export default function CampusPoolApp() {
       }
     } catch {
       showToast('Failed to post ride. Please check network.', 'error');
+    } finally {
+      setIsSubmittingRide(false);
     }
   };
 
-  // Driver Accepts Booking Request
+  // Driver Accepts Booking Request (Optimistic UI for Instant Click)
   const handleAcceptRequest = async (bookingId: number) => {
+    // Instant optimistic update
+    setBookings(prev => prev.map(b => b.booking_id === bookingId ? { ...b, booking_status: 'ACCEPTED' } : b));
+    setActionLoadingId(bookingId);
+
     try {
       const res = await fetch(`/api/bookings/${bookingId}/accept`, { method: 'POST' });
       const data = await res.json();
@@ -542,14 +555,22 @@ export default function CampusPoolApp() {
         fetchRides();
       } else {
         showToast(data.error || 'Could not accept booking', 'error');
+        fetchBookings();
       }
     } catch {
       showToast('Action failed', 'error');
+      fetchBookings();
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
-  // Driver Declines Booking Request
+  // Driver Declines Booking Request (Optimistic UI for Instant Click)
   const handleRejectRequest = async (bookingId: number) => {
+    // Instant optimistic update
+    setBookings(prev => prev.map(b => b.booking_id === bookingId ? { ...b, booking_status: 'REJECTED' } : b));
+    setActionLoadingId(bookingId);
+
     try {
       const res = await fetch(`/api/bookings/${bookingId}/reject`, { method: 'POST' });
       const data = await res.json();
@@ -558,15 +579,25 @@ export default function CampusPoolApp() {
         fetchBookings();
       } else {
         showToast(data.error || 'Could not decline booking', 'error');
+        fetchBookings();
       }
     } catch {
       showToast('Action failed', 'error');
+      fetchBookings();
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
-  // Driver Deletes an Offered Ride
+  // Driver Deletes an Offered Ride (Optimistic UI for Instant Click)
   const handleDeleteRide = async (rideId: number) => {
     if (!confirm('Are you sure you want to delete this offered carpool ride?')) return;
+    
+    // Instant optimistic removal from UI
+    const previousRides = [...rides];
+    setRides(prev => prev.filter(r => r.ride_id !== rideId));
+    setActionLoadingId(rideId);
+
     try {
       const res = await fetch(`/api/rides?id=${rideId}`, { method: 'DELETE' });
       const data = await res.json();
@@ -575,10 +606,14 @@ export default function CampusPoolApp() {
         fetchRides();
         fetchBookings();
       } else {
+        setRides(previousRides);
         showToast(data.error || 'Failed to delete ride', 'error');
       }
     } catch {
+      setRides(previousRides);
       showToast('Network error while deleting ride', 'error');
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -940,11 +975,16 @@ export default function CampusPoolApp() {
                           </div>
                           <button
                             type="button"
+                            disabled={actionLoadingId === ride.ride_id}
                             onClick={() => handleDeleteRide(ride.ride_id)}
-                            className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer active:scale-95 shrink-0"
+                            className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer active:scale-95 shrink-0"
                             title="Delete this ride"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            {actionLoadingId === ride.ride_id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
                             <span>Delete</span>
                           </button>
                         </div>
@@ -1094,10 +1134,20 @@ export default function CampusPoolApp() {
 
                 <button
                   type="submit"
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center justify-center space-x-2 cursor-pointer active:scale-95"
+                  disabled={isSubmittingRide}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center justify-center space-x-2 cursor-pointer active:scale-95"
                 >
-                  <Car className="w-4 h-4" />
-                  <span>Publish Ride to Database for ₹{newRideForm.cost_per_seat === '' ? 0 : newRideForm.cost_per_seat} / Seat</span>
+                  {isSubmittingRide ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Publishing Ride to Database...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Car className="w-4 h-4" />
+                      <span>Publish Ride to Database for ₹{newRideForm.cost_per_seat === '' ? 0 : newRideForm.cost_per_seat} / Seat</span>
+                    </>
+                  )}
                 </button>
               </form>
             </div>
@@ -1482,10 +1532,15 @@ export default function CampusPoolApp() {
                                 </div>
                                 <button
                                   type="button"
+                                  disabled={actionLoadingId === r.ride_id}
                                   onClick={() => handleDeleteRide(r.ride_id)}
-                                  className="w-full py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer active:scale-95"
+                                  className="w-full py-2 px-3 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer active:scale-95"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  {actionLoadingId === r.ride_id ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  )}
                                   <span>Delete this Offered Ride</span>
                                 </button>
                               </div>
@@ -1564,16 +1619,22 @@ export default function CampusPoolApp() {
                                     <div className="flex space-x-2">
                                       <button
                                         type="button"
+                                        disabled={actionLoadingId === b.booking_id}
                                         onClick={() => handleAcceptRequest(b.booking_id)}
-                                        className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer active:scale-95 flex items-center justify-center space-x-1"
+                                        className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer active:scale-95 flex items-center justify-center space-x-1"
                                       >
-                                        <Check className="w-3.5 h-3.5" />
+                                        {actionLoadingId === b.booking_id ? (
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                          <Check className="w-3.5 h-3.5" />
+                                        )}
                                         <span>Accept Request</span>
                                       </button>
                                       <button
                                         type="button"
+                                        disabled={actionLoadingId === b.booking_id}
                                         onClick={() => handleRejectRequest(b.booking_id)}
-                                        className="py-2 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer active:scale-95"
+                                        className="py-2 px-3 bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer active:scale-95"
                                       >
                                         Decline
                                       </button>
@@ -1726,10 +1787,18 @@ export default function CampusPoolApp() {
               </button>
               <button
                 type="button"
+                disabled={isBookingSeat}
                 onClick={handleConfirmBooking}
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-md cursor-pointer active:scale-95"
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-bold rounded-xl text-xs transition shadow-md cursor-pointer active:scale-95 flex items-center justify-center space-x-1.5"
               >
-                Confirm Booking
+                {isBookingSeat ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Booking Seat...</span>
+                  </>
+                ) : (
+                  <span>Confirm Booking</span>
+                )}
               </button>
             </div>
           </div>
