@@ -111,6 +111,18 @@ export async function POST(req: NextRequest) {
       passengerId = pRows[0].user_id;
     }
 
+    // Duplicate Check: Passenger cannot apply twice for the same ride if already PENDING or ACCEPTED
+    const existingBooking = await query<any[]>(
+      'SELECT booking_id FROM Bookings WHERE ride_id = ? AND passenger_id = ? AND booking_status IN ("PENDING", "ACCEPTED")',
+      [rideId, passengerId]
+    );
+    if (existingBooking && existingBooking.length > 0) {
+      return NextResponse.json({
+        success: false,
+        error: 'You have already applied or booked a seat for this carpool ride!',
+      }, { status: 400 });
+    }
+
     // Try MySQL insert
     await query(
       `INSERT INTO Bookings (ride_id, passenger_id, seats_requested, booking_status)

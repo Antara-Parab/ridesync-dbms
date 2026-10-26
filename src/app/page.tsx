@@ -423,6 +423,16 @@ export default function CampusPoolApp() {
       showToast('⚠️ You cannot book a seat on your own ride! You are the driver.', 'error');
       return;
     }
+    const currentName = currentUser.username.toLowerCase();
+    const alreadyBooked = bookings.some(
+      b => b.ride_id === ride.ride_id &&
+           (b.passenger_name || '').toLowerCase() === currentName &&
+           (b.booking_status === 'PENDING' || b.booking_status === 'ACCEPTED')
+    );
+    if (alreadyBooked) {
+      showToast('⚠️ You have already applied or booked a seat for this carpool ride!', 'info');
+      return;
+    }
     setSelectedRide(ride);
     setRequestedSeats(1);
     setPassengerNameInput(currentUser.username);
@@ -969,38 +979,85 @@ export default function CampusPoolApp() {
                         </div>
                       </div>
 
-                      {/* Clickable Book Button OR Driver Own-Ride Indicator */}
-                      {currentUser && ride.driver_name?.toLowerCase() === currentUser.username.toLowerCase() ? (
-                        <div className="flex items-center space-x-2">
-                          <div className="flex-1 py-2.5 px-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold text-center flex items-center justify-center space-x-1.5">
-                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span>Your Carpool</span>
-                          </div>
+                      {/* Clickable Book Button OR Driver Own-Ride Indicator OR Passenger Booking Status */}
+                      {(() => {
+                        const isDriver = currentUser && ride.driver_name?.toLowerCase() === currentUser.username.toLowerCase();
+                        if (isDriver) {
+                          return (
+                            <div className="flex items-center space-x-2">
+                              <div className="flex-1 py-2.5 px-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold text-center flex items-center justify-center space-x-1.5">
+                                <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span>Your Carpool</span>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={actionLoadingId === ride.ride_id}
+                                onClick={() => handleDeleteRide(ride.ride_id)}
+                                className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer active:scale-95 shrink-0"
+                                title="Delete this ride"
+                              >
+                                {actionLoadingId === ride.ride_id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        // Check if current logged in user already applied or booked this ride
+                        const currentName = (currentUser?.username || '').toLowerCase();
+                        const userBooking = currentUser
+                          ? bookings.find(b => b.ride_id === ride.ride_id && (b.passenger_name || '').toLowerCase() === currentName && (b.booking_status === 'PENDING' || b.booking_status === 'ACCEPTED'))
+                          : null;
+
+                        if (userBooking?.booking_status === 'PENDING') {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMyRidesSubTab('passenger');
+                                setActiveTab('bookings');
+                              }}
+                              className="w-full py-2.5 px-4 bg-amber-50 hover:bg-amber-100/80 border border-amber-300 text-amber-900 rounded-xl text-xs font-bold text-center flex items-center justify-center space-x-1.5 transition cursor-pointer shadow-xs"
+                              title="Click to view in My Rides"
+                            >
+                              <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0 animate-pulse" />
+                              <span>Approval Pending (View in My Rides)</span>
+                            </button>
+                          );
+                        }
+
+                        if (userBooking?.booking_status === 'ACCEPTED') {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMyRidesSubTab('passenger');
+                                setActiveTab('bookings');
+                              }}
+                              className="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-300 text-emerald-900 rounded-xl text-xs font-bold text-center flex items-center justify-center space-x-1.5 transition cursor-pointer shadow-xs"
+                              title="Click to view in My Rides"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>Seat Confirmed (View in My Rides)</span>
+                            </button>
+                          );
+                        }
+
+                        return (
                           <button
                             type="button"
-                            disabled={actionLoadingId === ride.ride_id}
-                            onClick={() => handleDeleteRide(ride.ride_id)}
-                            className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer active:scale-95 shrink-0"
-                            title="Delete this ride"
+                            onClick={() => handleOpenBookingModal(ride)}
+                            className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm cursor-pointer active:scale-95"
                           >
-                            {actionLoadingId === ride.ride_id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3.5 h-3.5" />
-                            )}
-                            <span>Delete</span>
+                            <span>Apply for Seat</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
                           </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleOpenBookingModal(ride)}
-                          className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm cursor-pointer active:scale-95"
-                        >
-                          <span>Apply for Seat</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
