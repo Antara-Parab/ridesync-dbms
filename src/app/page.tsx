@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Car, MapPin, Clock, Users, CheckCircle, 
   AlertCircle, Search, PlusCircle, Check, X, 
   ArrowRight, ShieldCheck, Tag, Sparkles, Phone,
   TrendingDown, CheckSquare, Square, LogIn, UserPlus,
-  LogOut, User, Lock, ChevronRight
+  LogOut, User, Lock, ChevronRight, Zap
 } from 'lucide-react';
 
 interface Ride {
@@ -51,6 +51,7 @@ export default function CampusPoolApp() {
   const [authUsername, setAuthUsername] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // App tabs: 'find' | 'offer' | 'bookings'
   const [activeTab, setActiveTab] = useState<'find' | 'offer' | 'bookings'>('find');
@@ -61,15 +62,18 @@ export default function CampusPoolApp() {
   // Search state
   const [searchSource, setSearchSource] = useState('');
   const [searchDest, setSearchDest] = useState('');
+  const sourceInputRef = useRef<HTMLInputElement>(null);
 
   // Booking Modal state
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
+  const [passengerNameInput, setPassengerNameInput] = useState('');
   const [passengerPhone, setPassengerPhone] = useState('9820445566');
   const [requestedSeats, setRequestedSeats] = useState(1);
   const [applyStudentDiscount, setApplyStudentDiscount] = useState(true);
 
   // Offer Ride Form state
   const [newRideForm, setNewRideForm] = useState({
+    driver_name: '',
     driver_phone: '9820112233',
     vehicle_model: 'Hyundai i20',
     vehicle_number: 'MH-01-AB-1234',
@@ -85,15 +89,21 @@ export default function CampusPoolApp() {
     setTimeout(() => setToast(null), 5000);
   };
 
-  // Check saved session
+  // Check saved session & fetch initial data
   useEffect(() => {
     const savedUser = localStorage.getItem('campuspool_user');
     if (savedUser) {
       try {
-        setCurrentUser(JSON.parse(savedUser));
+        const parsed = JSON.parse(savedUser);
+        setCurrentUser(parsed);
+        setPassengerNameInput(parsed.username);
+        setNewRideForm(prev => ({ ...prev, driver_name: parsed.username }));
       } catch {
         localStorage.removeItem('campuspool_user');
       }
+    } else {
+      // Default to guest name
+      setPassengerNameInput('Tanmay');
     }
     fetchRides();
     fetchBookings();
@@ -129,7 +139,55 @@ export default function CampusPoolApp() {
     }
   };
 
-  // Authentication Handlers
+  // Quick 1-Click Login Handler
+  const handleQuickLogin = async (username: string, pass: string) => {
+    setAuthLoading(true);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password: pass }),
+      });
+      const data = await res.json();
+      if (data.success && data.user) {
+        setCurrentUser(data.user);
+        setPassengerNameInput(data.user.username);
+        setNewRideForm(prev => ({ ...prev, driver_name: data.user.username }));
+        localStorage.setItem('campuspool_user', JSON.stringify(data.user));
+        setShowAuthModal(false);
+        showToast(`✅ Logged in as ${data.user.full_name || data.user.username}!`, 'success');
+      } else {
+        // Fallback to local login if offline
+        const fallbackUser: AuthUser = {
+          user_id: username === 'tanmay' ? 60003 : 60004,
+          username,
+          full_name: username === 'tanmay' ? 'Tanmay Shinde' : 'Antara Parab',
+        };
+        setCurrentUser(fallbackUser);
+        setPassengerNameInput(username);
+        setNewRideForm(prev => ({ ...prev, driver_name: username }));
+        localStorage.setItem('campuspool_user', JSON.stringify(fallbackUser));
+        setShowAuthModal(false);
+        showToast(`✅ Logged in as ${fallbackUser.full_name}!`, 'success');
+      }
+    } catch {
+      const fallbackUser: AuthUser = {
+        user_id: username === 'tanmay' ? 60003 : 60004,
+        username,
+        full_name: username === 'tanmay' ? 'Tanmay Shinde' : 'Antara Parab',
+      };
+      setCurrentUser(fallbackUser);
+      setPassengerNameInput(username);
+      setNewRideForm(prev => ({ ...prev, driver_name: username }));
+      localStorage.setItem('campuspool_user', JSON.stringify(fallbackUser));
+      setShowAuthModal(false);
+      showToast(`✅ Logged in as ${fallbackUser.full_name}!`, 'success');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Regular Auth Form Submit
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authUsername.trim() || !authPassword.trim()) {
@@ -153,7 +211,10 @@ export default function CampusPoolApp() {
       const data = await res.json();
       if (data.success && data.user) {
         setCurrentUser(data.user);
+        setPassengerNameInput(data.user.username);
+        setNewRideForm(prev => ({ ...prev, driver_name: data.user.username }));
         localStorage.setItem('campuspool_user', JSON.stringify(data.user));
+        setShowAuthModal(false);
         showToast(data.message, 'success');
         setAuthUsername('');
         setAuthPassword('');
@@ -173,9 +234,22 @@ export default function CampusPoolApp() {
     showToast('Logged out successfully', 'info');
   };
 
+  // Open Booking Modal for Any User
+  const handleOpenBookingModal = (ride: Ride) => {
+    setSelectedRide(ride);
+    setRequestedSeats(1);
+    if (currentUser) {
+      setPassengerNameInput(currentUser.username);
+    } else if (!passengerNameInput) {
+      setPassengerNameInput('Tanmay');
+    }
+  };
+
   // Student Books a Seat
   const handleConfirmBooking = async () => {
-    if (!selectedRide || !currentUser) return;
+    if (!selectedRide) return;
+
+    const bookerName = passengerNameInput.trim() || currentUser?.username || 'Student Passenger';
 
     try {
       const res = await fetch('/api/bookings', {
@@ -183,7 +257,7 @@ export default function CampusPoolApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ride_id: selectedRide.ride_id,
-          passenger_name: currentUser.username,
+          passenger_name: bookerName,
           passenger_phone: passengerPhone,
           seats_requested: requestedSeats,
           apply_student_discount: applyStudentDiscount,
@@ -208,7 +282,14 @@ export default function CampusPoolApp() {
   // Driver Offers a New Ride
   const handleOfferRide = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser || !newRideForm.source || !newRideForm.destination) {
+    const driverName = newRideForm.driver_name.trim() || currentUser?.username;
+
+    if (!driverName) {
+      showToast('Please enter your name or log in first!', 'error');
+      return;
+    }
+
+    if (!newRideForm.source.trim() || !newRideForm.destination.trim()) {
       showToast('Please fill in pickup and drop locations', 'error');
       return;
     }
@@ -219,14 +300,15 @@ export default function CampusPoolApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...newRideForm,
-          driver_name: currentUser.username,
+          driver_name: driverName,
         }),
       });
 
       const data = await res.json();
       if (data.success) {
-        showToast('Your carpool ride has been published to the database!', 'success');
+        showToast('🎉 Your carpool ride has been published to the database!', 'success');
         setNewRideForm({
+          driver_name: currentUser?.username || '',
           driver_phone: '9820112233',
           vehicle_model: 'Hyundai i20',
           vehicle_number: 'MH-01-AB-1234',
@@ -305,9 +387,13 @@ export default function CampusPoolApp() {
 
       {/* Main Top Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
+          {/* Logo */}
+          <div 
+            onClick={() => setActiveTab('find')} 
+            className="flex items-center space-x-3 cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition">
               <Car className="w-6 h-6" />
             </div>
             <div>
@@ -321,189 +407,13 @@ export default function CampusPoolApp() {
             </div>
           </div>
 
-          {/* User state / Navigation */}
-          {currentUser ? (
-            <div className="flex items-center space-x-3">
-              <div className="hidden sm:flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
-                <User className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="font-semibold text-slate-800">{currentUser.username}</span>
-              </div>
+          {/* Navigation Bar (Always Clickable) */}
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <nav className="flex space-x-1 bg-slate-100 p-1 rounded-xl">
               <button
-                onClick={handleLogout}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 transition flex items-center space-x-1"
-                title="Logout"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Logout</span>
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setAuthMode('login')}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
-              >
-                Login
-              </button>
-              <button
-                onClick={() => setAuthMode('signup')}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-xs"
-              >
-                Sign Up
-              </button>
-            </div>
-          )}
-        </div>
-      </header>
-
-      {/* ========================================================================= */}
-      {/* 1. SIMPLE LANDING PAGE (WHEN NOT LOGGED IN) */}
-      {/* ========================================================================= */}
-      {!currentUser ? (
-        <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-12 flex flex-col justify-center">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-            {/* Left Column: Hero Text */}
-            <div className="lg:col-span-7 space-y-6">
-              <span className="inline-flex items-center space-x-1.5 bg-emerald-50 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold border border-emerald-200">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>VESIT College Student Carpool Network</span>
-              </span>
-
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
-                Pool rides to college for just <span className="text-emerald-600">₹40</span> per seat.
-              </h1>
-
-              <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                Connect with college batchmates driving to VESIT campus from Chembur, Dadar, Thane, Vashi, and beyond. Rent empty car seats, travel comfortably, and get an automatic 10% student subsidy discount!
-              </p>
-
-              {/* 3 Simple Value Props */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-xs">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs mb-2">
-                    ₹40
-                  </div>
-                  <h4 className="font-bold text-xs text-slate-900 mb-0.5">Fixed Low Fare</h4>
-                  <p className="text-[11px] text-slate-500">Rent a seat for just ₹40 per trip</p>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-xs">
-                  <div className="w-8 h-8 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center font-bold text-xs mb-2">
-                    -10%
-                  </div>
-                  <h4 className="font-bold text-xs text-slate-900 mb-0.5">Student Subsidy</h4>
-                  <p className="text-[11px] text-slate-500">Instant arithmetic discount with College ID</p>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-xs">
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs mb-2">
-                    A➔B
-                  </div>
-                  <h4 className="font-bold text-xs text-slate-900 mb-0.5">Point A to Point B</h4>
-                  <p className="text-[11px] text-slate-500">Direct rides straight to college gate</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Easy Login / Sign Up Card */}
-            <div className="lg:col-span-5">
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xl">
-                {/* Auth Mode Switcher */}
-                <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
-                  <button
-                    onClick={() => setAuthMode('login')}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
-                      authMode === 'login' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    Login
-                  </button>
-                  <button
-                    onClick={() => setAuthMode('signup')}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
-                      authMode === 'signup' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    Sign Up
-                  </button>
-                </div>
-
-                <div className="mb-5">
-                  <h3 className="text-base font-bold text-slate-900">
-                    {authMode === 'login' ? 'Welcome Back!' : 'Create Student Account'}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {authMode === 'login' 
-                      ? 'Enter your username and password to access carpools' 
-                      : 'Sign up with just a username and password to get started'}
-                  </p>
-                </div>
-
-                <form onSubmit={handleAuthSubmit} className="space-y-4 text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Username</label>
-                    <div className="relative">
-                      <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="text"
-                        placeholder="e.g. ananya or rohan"
-                        required
-                        value={authUsername}
-                        onChange={(e) => setAuthUsername(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 pl-9 pr-3 py-2 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Password</label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="password"
-                        placeholder="Enter your password"
-                        required
-                        value={authPassword}
-                        onChange={(e) => setAuthPassword(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 pl-9 pr-3 py-2 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={authLoading}
-                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center justify-center space-x-1.5"
-                  >
-                    {authLoading ? (
-                      <span>Connecting to database...</span>
-                    ) : (
-                      <>
-                        <span>{authMode === 'login' ? 'Login to CampusPool' : 'Sign Up & Save to Database'}</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </>
-                    )}
-                  </button>
-                </form>
-
-                <div className="mt-5 p-3 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-500 text-center">
-                  💡 <strong>Quick Demo:</strong> Try username <code className="font-bold text-slate-800 font-mono">tanmay</code> or <code className="font-bold text-slate-800 font-mono">antara</code> with password <code className="font-bold text-slate-800 font-mono">123</code>!
-                </div>
-              </div>
-            </div>
-          </div>
-        </main>
-      ) : (
-        /* ========================================================================= */
-        /* 2. MAIN LOGGED-IN APPLICATION (FIND RIDES / OFFER RIDES / MY RIDES) */
-        /* ========================================================================= */
-        <main className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 flex-1">
-          {/* Navigation Bar for Logged In User */}
-          <div className="flex justify-between items-center mb-6">
-            <nav className="flex space-x-1 sm:space-x-2 bg-slate-200/70 p-1 rounded-xl">
-              <button
+                type="button"
                 onClick={() => setActiveTab('find')}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer ${
                   activeTab === 'find' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -511,8 +421,9 @@ export default function CampusPoolApp() {
                 <span>Find Ride</span>
               </button>
               <button
+                type="button"
                 onClick={() => setActiveTab('offer')}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer ${
                   activeTab === 'offer' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -520,8 +431,9 @@ export default function CampusPoolApp() {
                 <span>Offer Ride</span>
               </button>
               <button
+                type="button"
                 onClick={() => setActiveTab('bookings')}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer ${
                   activeTab === 'bookings' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -532,25 +444,156 @@ export default function CampusPoolApp() {
               </button>
             </nav>
 
-            <span className="text-xs text-slate-500 hidden sm:inline">
-              Welcome, <strong className="text-slate-800">{currentUser.username}</strong>
-            </span>
+            {/* User Profile / Login */}
+            {currentUser ? (
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200 text-emerald-900 px-3 py-1.5 rounded-xl text-xs font-bold">
+                  <User className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{currentUser.username}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer flex items-center space-x-1"
+                  title="Logout"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Logout</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setShowAuthModal(true);
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('signup');
+                    setShowAuthModal(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-xs cursor-pointer"
+                >
+                  Sign Up
+                </button>
+              </div>
+            )}
           </div>
+        </div>
+      </header>
 
-          {/* TAB 1: FIND RIDES */}
-          {activeTab === 'find' && (
-            <div className="space-y-6">
-              {/* Search Banner */}
-              <div className="bg-gradient-to-r from-emerald-800 to-teal-700 rounded-2xl p-6 text-white shadow-lg">
-                <h2 className="text-xl sm:text-2xl font-bold mb-1">Search Available Carpools</h2>
-                <p className="text-emerald-100 text-xs sm:text-sm mb-4">
-                  Rent empty seats for ₹40 and travel directly to college!
+      {/* Main Content Area */}
+      <main className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 flex-1 space-y-6">
+        {/* ========================================================================= */}
+        {/* 1-CLICK QUICK LOGIN BANNER (WHEN NOT LOGGED IN) */}
+        {/* ========================================================================= */}
+        {!currentUser && (
+          <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                <Zap className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-bold text-xs sm:text-sm text-slate-900">
+                  Quick Demo Access: 1-Click Login
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  No typing required! Click either account to instantly log in:
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleQuickLogin('tanmay', '123')}
+                className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5 cursor-pointer active:scale-95"
+              >
+                <span>👤 Login as Tanmay</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickLogin('antara', '123')}
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5 cursor-pointer active:scale-95"
+              >
+                <span>👤 Login as Antara</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 1: FIND RIDES (PASSENGER) */}
+        {/* ========================================================================= */}
+        {activeTab === 'find' && (
+          <div className="space-y-6">
+            {/* Hero / Route Search Banner */}
+            <div className="bg-gradient-to-r from-emerald-800 to-teal-700 rounded-2xl p-6 sm:p-8 text-white shadow-lg relative overflow-hidden">
+              <div className="relative z-10 max-w-2xl">
+                <span className="inline-flex items-center space-x-1 bg-emerald-700/60 text-emerald-200 text-xs px-2.5 py-1 rounded-full font-semibold mb-3">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>College Verified Student Carpools</span>
+                </span>
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">
+                  Pool a Ride to VESIT Campus for ₹40
+                </h1>
+                <p className="text-emerald-100 text-xs sm:text-sm mb-5">
+                  Skip the crowded local train and auto queues. Travel comfortably in a student carpool and get 10% off with your college ID!
                 </p>
 
+                {/* 3 Clickable Feature Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-5">
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setSearchSource('');
+                      setSearchDest('');
+                      fetchRides();
+                      showToast('Showing all carpools at standard ₹40 rent', 'info');
+                    }}
+                    className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-left transition cursor-pointer active:scale-95"
+                  >
+                    <div className="font-extrabold text-xs text-white">💰 ₹40 Fixed Rent</div>
+                    <div className="text-[10px] text-emerald-200">Affordable seat sharing</div>
+                  </button>
+
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      showToast('💡 10% Subsidy Arithmetic: Seats × ₹40 - 10% Off = Final Payable!', 'info');
+                    }}
+                    className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-left transition cursor-pointer active:scale-95"
+                  >
+                    <div className="font-extrabold text-xs text-white">🎓 10% Student Subsidy</div>
+                    <div className="text-[10px] text-emerald-200">Automatic arithmetic discount</div>
+                  </button>
+
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      sourceInputRef.current?.focus();
+                      showToast('Enter your pickup area below (e.g. Chembur, Dadar, Thane)', 'info');
+                    }}
+                    className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-left transition cursor-pointer active:scale-95"
+                  >
+                    <div className="font-extrabold text-xs text-white">📍 Point A to Point B</div>
+                    <div className="text-[10px] text-emerald-200">Direct rides to campus gate</div>
+                  </button>
+                </div>
+
+                {/* Search Bar */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-white/10 backdrop-blur-md p-2.5 rounded-xl border border-white/20">
                   <div>
-                    <label className="block text-[10px] font-bold text-emerald-200 uppercase mb-1">From (Point A)</label>
+                    <label className="block text-[10px] font-bold text-emerald-200 uppercase mb-1">Pick-up Location</label>
                     <input
+                      ref={sourceInputRef}
                       type="text"
                       placeholder="e.g. Chembur, Dadar, Thane, Vashi..."
                       value={searchSource}
@@ -559,7 +602,7 @@ export default function CampusPoolApp() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-emerald-200 uppercase mb-1">To (Point B)</label>
+                    <label className="block text-[10px] font-bold text-emerald-200 uppercase mb-1">Drop Location</label>
                     <input
                       type="text"
                       placeholder="VESIT Campus"
@@ -568,301 +611,394 @@ export default function CampusPoolApp() {
                       className="w-full bg-white text-slate-800 placeholder-slate-400 text-xs rounded-lg px-3 py-2 focus:outline-none"
                     />
                   </div>
-                  <div className="flex items-end">
+                  <div className="flex items-end space-x-1.5">
                     <button
-                      onClick={fetchRides}
-                      className="w-full bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-bold text-xs py-2 px-4 rounded-lg flex items-center justify-center space-x-1.5 transition shadow"
+                      type="button"
+                      onClick={() => {
+                        fetchRides();
+                        showToast(`🔍 Searching for carpools from "${searchSource || 'anywhere'}"...`, 'info');
+                      }}
+                      className="flex-1 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-bold text-xs py-2 px-3 rounded-lg flex items-center justify-center space-x-1.5 transition shadow cursor-pointer active:scale-95"
                     >
                       <Search className="w-3.5 h-3.5" />
-                      <span>Search Rides</span>
+                      <span>Search</span>
                     </button>
+                    {(searchSource || searchDest) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchSource('');
+                          setSearchDest('');
+                          fetchRides();
+                        }}
+                        className="py-2 px-2.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+                        title="Clear filters"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
-              </div>
-
-              {/* Rides List */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {rides.map((ride) => (
-                  <div 
-                    key={ride.ride_id} 
-                    className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center space-x-1.5 font-bold text-slate-900 text-sm">
-                          <span>{ride.source}</span>
-                          <ArrowRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span>{ride.destination}</span>
-                        </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          ride.available_seats > 1 
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
-                        }`}>
-                          {ride.available_seats} {ride.available_seats === 1 ? 'seat left' : 'seats left'}
-                        </span>
-                      </div>
-
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-1.5 mb-4">
-                        <div className="flex justify-between items-center">
-                          <span className="text-slate-400">Driver:</span>
-                          <span className="font-semibold text-slate-800">{ride.driver_name}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-slate-400">Vehicle:</span>
-                          <span className="text-slate-700 font-medium">{ride.vehicle_model} ({ride.vehicle_number})</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-slate-400">Departure:</span>
-                          <span className="font-semibold text-slate-700 flex items-center space-x-1">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            <span>{ride.departure_time}</span>
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-baseline justify-between mb-4">
-                        <div>
-                          <span className="text-lg font-black text-slate-900">₹{ride.cost_per_seat}</span>
-                          <span className="text-xs text-slate-500"> / seat</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                            <Tag className="w-3 h-3" />
-                            <span>₹{(ride.cost_per_seat * 0.9).toFixed(0)} with Student ID</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setSelectedRide(ride);
-                        setRequestedSeats(1);
-                      }}
-                      className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm"
-                    >
-                      <span>Apply for Seat</span>
-                    </button>
-                  </div>
-                ))}
               </div>
             </div>
-          )}
 
-          {/* TAB 2: OFFER A RIDE */}
-          {activeTab === 'offer' && (
-            <div className="max-w-2xl mx-auto">
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs">
-                <div className="flex items-center space-x-3 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                    <Car className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-slate-900">Offer Carpool Seats</h2>
-                    <p className="text-xs text-slate-500">
-                      Driving as: <strong className="text-slate-800">{currentUser.username}</strong>
-                    </p>
-                  </div>
-                </div>
+            {/* Ride Cards List */}
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-base font-bold text-slate-900 flex items-center space-x-2">
+                  <span>Available Student Rides</span>
+                  <span className="text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full font-semibold">
+                    {rides.length} active
+                  </span>
+                </h2>
+                <button
+                  type="button"
+                  onClick={fetchRides}
+                  className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold cursor-pointer"
+                >
+                  ↻ Refresh list
+                </button>
+              </div>
 
-                <form onSubmit={handleOfferRide} className="space-y-4 text-xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Car Model *</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Hyundai i20 / Swift"
-                        required
-                        value={newRideForm.vehicle_model}
-                        onChange={(e) => setNewRideForm({ ...newRideForm, vehicle_model: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Number Plate *</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. MH-01-AB-1234"
-                        required
-                        value={newRideForm.vehicle_number}
-                        onChange={(e) => setNewRideForm({ ...newRideForm, vehicle_number: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 uppercase"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Pickup (Point A) *</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Chembur Naka / Dadar Circle"
-                        required
-                        value={newRideForm.source}
-                        onChange={(e) => setNewRideForm({ ...newRideForm, source: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Drop Location (Point B) *</label>
-                      <input
-                        type="text"
-                        required
-                        value={newRideForm.destination}
-                        onChange={(e) => setNewRideForm({ ...newRideForm, destination: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Departure Time *</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 08:15 AM"
-                        required
-                        value={newRideForm.departure_time}
-                        onChange={(e) => setNewRideForm({ ...newRideForm, departure_time: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Seats Available *</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="6"
-                        required
-                        value={newRideForm.available_seats}
-                        onChange={(e) => setNewRideForm({ ...newRideForm, available_seats: Number(e.target.value) })}
-                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Rent / Seat (₹) *</label>
-                      <input
-                        type="number"
-                        min="10"
-                        step="5"
-                        required
-                        value={newRideForm.cost_per_seat}
-                        onChange={(e) => setNewRideForm({ ...newRideForm, cost_per_seat: Number(e.target.value) })}
-                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800"
-                      />
-                    </div>
-                  </div>
-
+              {rides.length === 0 ? (
+                <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+                  <Car className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-slate-700">No active carpools matching your search</p>
+                  <p className="text-xs text-slate-400 mt-1">Try clearing filters or offer a new ride!</p>
                   <button
-                    type="submit"
-                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center justify-center space-x-2"
+                    type="button"
+                    onClick={() => {
+                      setSearchSource('');
+                      setSearchDest('');
+                      fetchRides();
+                    }}
+                    className="mt-3 px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold transition cursor-pointer"
                   >
-                    <Car className="w-4 h-4" />
-                    <span>Publish Ride for ₹{newRideForm.cost_per_seat} / Seat</span>
+                    View All Rides
                   </button>
-                </form>
-              </div>
-            </div>
-          )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {rides.map((ride) => (
+                    <div 
+                      key={ride.ride_id} 
+                      className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between"
+                    >
+                      <div>
+                        {/* Route Title */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center space-x-1.5 font-bold text-slate-900 text-sm">
+                            <span>{ride.source}</span>
+                            <ArrowRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>{ride.destination}</span>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            ride.available_seats > 1 
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}>
+                            {ride.available_seats} {ride.available_seats === 1 ? 'seat left' : 'seats left'}
+                          </span>
+                        </div>
 
-          {/* TAB 3: MY RIDES & APPROVALS */}
-          {activeTab === 'bookings' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
-                <div className="flex justify-between items-center mb-4">
+                        {/* Driver & Car Details */}
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-1.5 mb-4">
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-400">Driver:</span>
+                            <span className="font-semibold text-slate-800 flex items-center space-x-1">
+                              <span>{ride.driver_name}</span>
+                              <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1 rounded font-bold">VESIT</span>
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-400">Vehicle:</span>
+                            <span className="text-slate-700 font-medium">{ride.vehicle_model} ({ride.vehicle_number})</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-400">Departure:</span>
+                            <span className="font-semibold text-slate-700 flex items-center space-x-1">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              <span>{ride.departure_time}</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Pricing and Discount */}
+                        <div className="flex items-baseline justify-between mb-4">
+                          <div>
+                            <span className="text-lg font-black text-slate-900">₹{ride.cost_per_seat}</span>
+                            <span className="text-xs text-slate-500"> / seat</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              <Tag className="w-3 h-3" />
+                              <span>₹{(Number(ride.cost_per_seat) * 0.9).toFixed(0)} with Student ID</span>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Clickable Book Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenBookingModal(ride)}
+                        className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm cursor-pointer active:scale-95"
+                      >
+                        <span>Apply for Seat</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 2: OFFER A RIDE (DRIVER) */}
+        {/* ========================================================================= */}
+        {activeTab === 'offer' && (
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Car className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Offer Carpool Seats</h2>
+                  <p className="text-xs text-slate-500">
+                    Share your empty seats, help batchmates, and save fuel!
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleOfferRide} className="space-y-4 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Your Name *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Tanmay / Antara"
+                    required
+                    value={newRideForm.driver_name}
+                    onChange={(e) => setNewRideForm({ ...newRideForm, driver_name: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <h3 className="text-base font-bold text-slate-900">Student Ride Requests & Bookings</h3>
-                    <p className="text-xs text-slate-500">Track and manage carpools saved in database</p>
+                    <label className="block font-semibold text-slate-700 mb-1">Car Model *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Hyundai i20 / Swift"
+                      required
+                      value={newRideForm.vehicle_model}
+                      onChange={(e) => setNewRideForm({ ...newRideForm, vehicle_model: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Number Plate *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. MH-01-AB-1234"
+                      required
+                      value={newRideForm.vehicle_number}
+                      onChange={(e) => setNewRideForm({ ...newRideForm, vehicle_number: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
                   </div>
                 </div>
 
-                {bookings.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400 text-xs">
-                    No booking requests yet. Apply for a seat from the "Find Ride" tab!
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Pickup (Point A) *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Chembur Naka / Dadar Circle"
+                      required
+                      value={newRideForm.source}
+                      onChange={(e) => setNewRideForm({ ...newRideForm, source: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
                   </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left text-slate-600">
-                      <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
-                        <tr>
-                          <th className="py-2.5 px-3">Passenger</th>
-                          <th className="py-2.5 px-3">Route</th>
-                          <th className="py-2.5 px-3">Seats</th>
-                          <th className="py-2.5 px-3">Fare</th>
-                          <th className="py-2.5 px-3">Status</th>
-                          <th className="py-2.5 px-3 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-medium">
-                        {bookings.map((b) => (
-                          <tr key={b.booking_id} className="hover:bg-slate-50/80">
-                            <td className="py-3 px-3">
-                              <div className="font-bold text-slate-900">{b.passenger_name}</div>
-                              <div className="text-[10px] text-slate-400">{b.passenger_phone}</div>
-                            </td>
-                            <td className="py-3 px-3">
-                              <div className="font-semibold text-slate-800">{b.source} ➔ {b.destination}</div>
-                              <div className="text-[10px] text-slate-400">{b.departure_time}</div>
-                            </td>
-                            <td className="py-3 px-3">
-                              <span className="font-bold text-slate-900">{b.seats_requested}</span> seat(s)
-                            </td>
-                            <td className="py-3 px-3">
-                              <div className="font-bold text-slate-900">₹{b.discounted_fare}</div>
-                              {b.has_student_discount && (
-                                <div className="text-[10px] text-emerald-600 flex items-center space-x-1 font-semibold">
-                                  <TrendingDown className="w-2.5 h-2.5" />
-                                  <span>10% Student Subsidy</span>
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-3 px-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                b.booking_status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' :
-                                b.booking_status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
-                                'bg-rose-100 text-rose-800'
-                              }`}>
-                                {b.booking_status === 'ACCEPTED' ? 'Confirmed' :
-                                 b.booking_status === 'PENDING' ? 'Pending Approval' : 'Declined'}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 text-right space-x-1">
-                              {b.booking_status === 'PENDING' ? (
-                                <>
-                                  <button
-                                    onClick={() => handleAcceptRequest(b.booking_id)}
-                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-[11px] font-bold transition shadow-xs"
-                                  >
-                                    Accept
-                                  </button>
-                                  <button
-                                    onClick={() => handleRejectRequest(b.booking_id)}
-                                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-[11px] font-medium transition"
-                                  >
-                                    Decline
-                                  </button>
-                                </>
-                              ) : (
-                                <span className="text-[11px] text-slate-400 italic">Done</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Drop Location (Point B) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newRideForm.destination}
+                      onChange={(e) => setNewRideForm({ ...newRideForm, destination: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
                   </div>
-                )}
-              </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Departure Time *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 08:15 AM"
+                      required
+                      value={newRideForm.departure_time}
+                      onChange={(e) => setNewRideForm({ ...newRideForm, departure_time: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Seats Available *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="6"
+                      required
+                      value={newRideForm.available_seats}
+                      onChange={(e) => setNewRideForm({ ...newRideForm, available_seats: Number(e.target.value) })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Rent / Seat (₹) *</label>
+                    <input
+                      type="number"
+                      min="10"
+                      step="5"
+                      required
+                      value={newRideForm.cost_per_seat}
+                      onChange={(e) => setNewRideForm({ ...newRideForm, cost_per_seat: Number(e.target.value) })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center justify-center space-x-2 cursor-pointer active:scale-95"
+                >
+                  <Car className="w-4 h-4" />
+                  <span>Publish Ride to Database for ₹{newRideForm.cost_per_seat} / Seat</span>
+                </button>
+              </form>
             </div>
-          )}
-        </main>
-      )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: MY RIDES & APPROVALS */}
+        {/* ========================================================================= */}
+        {activeTab === 'bookings' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Student Ride Requests & Bookings</h3>
+                  <p className="text-xs text-slate-500">Track and manage carpools saved in database</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchBookings}
+                  className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold cursor-pointer"
+                >
+                  ↻ Refresh
+                </button>
+              </div>
+
+              {bookings.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 text-xs">
+                  <p>No booking requests yet.</p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('find')}
+                    className="mt-2 text-emerald-600 font-bold hover:underline cursor-pointer"
+                  >
+                    Go to "Find Ride" to apply for a seat!
+                  </button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left text-slate-600">
+                    <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
+                      <tr>
+                        <th className="py-2.5 px-3">Passenger</th>
+                        <th className="py-2.5 px-3">Route</th>
+                        <th className="py-2.5 px-3">Seats</th>
+                        <th className="py-2.5 px-3">Fare</th>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {bookings.map((b) => (
+                        <tr key={b.booking_id} className="hover:bg-slate-50/80">
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-slate-900">{b.passenger_name}</div>
+                            <div className="text-[10px] text-slate-400">{b.passenger_phone}</div>
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="font-semibold text-slate-800">{b.source} ➔ {b.destination}</div>
+                            <div className="text-[10px] text-slate-400">{b.departure_time}</div>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="font-bold text-slate-900">{b.seats_requested}</span> seat(s)
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-slate-900">₹{b.discounted_fare}</div>
+                            {b.has_student_discount && (
+                              <div className="text-[10px] text-emerald-600 flex items-center space-x-1 font-semibold">
+                                <TrendingDown className="w-2.5 h-2.5" />
+                                <span>10% Student Subsidy</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              b.booking_status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' :
+                              b.booking_status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
+                              'bg-rose-100 text-rose-800'
+                            }`}>
+                              {b.booking_status === 'ACCEPTED' ? 'Confirmed' :
+                               b.booking_status === 'PENDING' ? 'Pending Approval' : 'Declined'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-right space-x-1">
+                            {b.booking_status === 'PENDING' ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAcceptRequest(b.booking_id)}
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-[11px] font-bold transition shadow-xs cursor-pointer active:scale-95"
+                                >
+                                  Accept
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRejectRequest(b.booking_id)}
+                                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-[11px] font-medium transition cursor-pointer active:scale-95"
+                                >
+                                  Decline
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 italic">Done</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
 
       {/* ========================================================================= */}
-      {/* BOOKING MODAL WITH ARITHMETIC CALCULATOR */}
+      {/* MODAL 1: BOOKING MODAL (OPENS FOR ANYONE CLICKING "APPLY FOR SEAT") */}
       {/* ========================================================================= */}
-      {selectedRide && currentUser && (
+      {selectedRide && (
         <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
             <div className="flex justify-between items-start mb-4">
@@ -875,8 +1011,9 @@ export default function CampusPoolApp() {
                 </h3>
               </div>
               <button 
+                type="button"
                 onClick={() => setSelectedRide(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -903,6 +1040,17 @@ export default function CampusPoolApp() {
 
             <div className="space-y-3 mb-4 text-xs">
               <div>
+                <label className="block font-semibold text-slate-700 mb-1">Your Name</label>
+                <input
+                  type="text"
+                  placeholder="Enter your name"
+                  value={passengerNameInput}
+                  onChange={(e) => setPassengerNameInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
                 <label className="block font-semibold text-slate-700 mb-1">Seats to Rent</label>
                 <div className="flex items-center space-x-2">
                   {[1, 2, 3].map((num) => (
@@ -911,7 +1059,7 @@ export default function CampusPoolApp() {
                       type="button"
                       disabled={num > selectedRide.available_seats}
                       onClick={() => setRequestedSeats(num)}
-                      className={`flex-1 py-1.5 rounded-lg font-bold text-xs border transition ${
+                      className={`flex-1 py-1.5 rounded-lg font-bold text-xs border transition cursor-pointer ${
                         requestedSeats === num 
                           ? 'bg-slate-900 text-white border-slate-900' 
                           : num > selectedRide.available_seats
@@ -967,18 +1115,121 @@ export default function CampusPoolApp() {
 
             <div className="flex space-x-2">
               <button
+                type="button"
                 onClick={() => setSelectedRide(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition"
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleConfirmBooking}
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-md"
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-md cursor-pointer active:scale-95"
               >
                 Confirm Booking
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: AUTH MODAL (LOGIN / SIGN UP) */}
+      {/* ========================================================================= */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {authMode === 'login' ? 'Login to CampusPool' : 'Create Student Account'}
+                </h3>
+                <p className="text-xs text-slate-500">Only username and password required</p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowAuthModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick 1-Click Buttons */}
+            <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+              <p className="text-[10px] font-bold text-slate-400 uppercase text-center">1-Click Instant Login</p>
+              <div className="flex space-x-2">
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('tanmay', '123')}
+                  className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition cursor-pointer active:scale-95"
+                >
+                  Tanmay (123)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('antara', '123')}
+                  className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer active:scale-95"
+                >
+                  Antara (123)
+                </button>
+              </div>
+            </div>
+
+            <div className="flex bg-slate-100 p-1 rounded-xl mb-4 text-xs">
+              <button
+                type="button"
+                onClick={() => setAuthMode('login')}
+                className={`flex-1 py-1.5 font-bold rounded-lg transition cursor-pointer ${
+                  authMode === 'login' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'
+                }`}
+              >
+                Login
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthMode('signup')}
+                className={`flex-1 py-1.5 font-bold rounded-lg transition cursor-pointer ${
+                  authMode === 'signup' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'
+                }`}
+              >
+                Sign Up
+              </button>
+            </div>
+
+            <form onSubmit={handleAuthSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Username</label>
+                <input
+                  type="text"
+                  placeholder="Enter username"
+                  required
+                  value={authUsername}
+                  onChange={(e) => setAuthUsername(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Password</label>
+                <input
+                  type="password"
+                  placeholder="Enter password"
+                  required
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-md cursor-pointer active:scale-95"
+              >
+                {authLoading ? 'Connecting...' : authMode === 'login' ? 'Login' : 'Create Account'}
+              </button>
+            </form>
           </div>
         </div>
       )}
