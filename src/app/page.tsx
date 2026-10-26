@@ -315,8 +315,8 @@ export default function CampusPoolApp() {
         localStorage.removeItem('campuspool_user');
       }
     } else {
-      // Default to guest name
-      setPassengerNameInput('Tanmay');
+      // Default to empty when logged out
+      setPassengerNameInput('');
     }
     fetchRides();
     fetchBookings();
@@ -396,6 +396,7 @@ export default function CampusPoolApp() {
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('campuspool_user');
+    setPassengerNameInput('');
     setNewRideForm({
       driver_name: '',
       driver_phone: '9820112233',
@@ -412,17 +413,19 @@ export default function CampusPoolApp() {
 
   // Open Booking Modal for Any User
   const handleOpenBookingModal = (ride: Ride) => {
-    if (currentUser && ride.driver_name?.toLowerCase() === currentUser.username.toLowerCase()) {
+    if (!currentUser) {
+      showToast('Please log in with your student account to book a seat!', 'info');
+      setAuthMode('login');
+      setShowAuthModal(true);
+      return;
+    }
+    if (ride.driver_name?.toLowerCase() === currentUser.username.toLowerCase()) {
       showToast('⚠️ You cannot book a seat on your own ride! You are the driver.', 'error');
       return;
     }
     setSelectedRide(ride);
     setRequestedSeats(1);
-    if (currentUser) {
-      setPassengerNameInput(currentUser.username);
-    } else if (!passengerNameInput) {
-      setPassengerNameInput('');
-    }
+    setPassengerNameInput(currentUser.username);
   };
 
   // Student Books a Seat
@@ -1011,41 +1014,62 @@ export default function CampusPoolApp() {
         {/* ========================================================================= */}
         {activeTab === 'offer' && (
           <div className="max-w-2xl mx-auto">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs">
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <Car className="w-5 h-5" />
+            {!currentUser ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-8 sm:p-10 text-center shadow-xs">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+                  <Lock className="w-6 h-6" />
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900">Offer Carpool Seats</h2>
-                  <p className="text-xs text-slate-500">
-                    Share your empty seats, help batchmates, and save fuel!
-                  </p>
-                </div>
+                <h3 className="text-base font-bold text-slate-900 mb-1">Login Required to Offer a Carpool</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto mb-5">
+                  Please log in with your college student account to publish an offered ride so classmates can book seats with you.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setShowAuthModal(true);
+                  }}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-sm cursor-pointer active:scale-95"
+                >
+                  Login as Student Driver
+                </button>
               </div>
-
-              <form onSubmit={handleOfferRide} className="space-y-4 text-xs">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-semibold text-slate-700">Driver (Account)</label>
-                    <span className="text-[10px] font-bold text-slate-400 flex items-center space-x-1">
-                      <Lock className="w-3 h-3 text-slate-400" />
-                      <span>Locked to your username</span>
-                    </span>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs">
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <Car className="w-5 h-5" />
                   </div>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      readOnly
-                      disabled
-                      value={currentUser ? currentUser.username : (newRideForm.driver_name || 'tanmay')}
-                      className="w-full bg-slate-100 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 font-bold cursor-not-allowed select-none"
-                    />
-                    <div className="absolute right-3 top-2.5 text-slate-400">
-                      <Lock className="w-4 h-4" />
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">Offer Carpool Seats</h2>
+                    <p className="text-xs text-slate-500">
+                      Share your empty seats, help batchmates, and save fuel!
+                    </p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleOfferRide} className="space-y-4 text-xs">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-semibold text-slate-700">Driver (Account)</label>
+                      <span className="text-[10px] font-bold text-slate-400 flex items-center space-x-1">
+                        <Lock className="w-3 h-3 text-slate-400" />
+                        <span>Locked to your username</span>
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        readOnly
+                        disabled
+                        value={currentUser.username}
+                        className="w-full bg-slate-100 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 font-bold cursor-not-allowed select-none"
+                      />
+                      <div className="absolute right-3 top-2.5 text-slate-400">
+                        <Lock className="w-4 h-4" />
+                      </div>
                     </div>
                   </div>
-                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -1161,6 +1185,7 @@ export default function CampusPoolApp() {
                 </button>
               </form>
             </div>
+          )}
           </div>
         )}
 
