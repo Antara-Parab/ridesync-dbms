@@ -277,7 +277,7 @@ export default function CampusPoolApp() {
     const clean = username.trim().toLowerCase();
     if (clean === 'tanmay') {
       setNewRideForm({
-        driver_name: 'Tanmay',
+        driver_name: clean,
         driver_phone: '9820112233',
         vehicle_model: 'Honda Amaze',
         vehicle_number: 'MH-04-KR-9798',
@@ -290,7 +290,7 @@ export default function CampusPoolApp() {
     } else {
       setNewRideForm(prev => ({
         ...prev,
-        driver_name: username,
+        driver_name: clean,
       }));
     }
   };
@@ -472,7 +472,7 @@ export default function CampusPoolApp() {
   // Driver Offers a New Ride
   const handleOfferRide = async (e: React.FormEvent) => {
     e.preventDefault();
-    const driverName = newRideForm.driver_name.trim() || currentUser?.username;
+    const driverName = (currentUser ? currentUser.username : newRideForm.driver_name).trim().toLowerCase();
 
     if (!driverName) {
       showToast('Please enter your name or log in first!', 'error');
@@ -1026,15 +1026,25 @@ export default function CampusPoolApp() {
 
               <form onSubmit={handleOfferRide} className="space-y-4 text-xs">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Your Name *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Tanmay / Antara"
-                    required
-                    value={newRideForm.driver_name}
-                    onChange={(e) => setNewRideForm({ ...newRideForm, driver_name: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700">Driver (Account)</label>
+                    <span className="text-[10px] font-bold text-slate-400 flex items-center space-x-1">
+                      <Lock className="w-3 h-3 text-slate-400" />
+                      <span>Locked to your username</span>
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      readOnly
+                      disabled
+                      value={currentUser ? currentUser.username : (newRideForm.driver_name || 'tanmay')}
+                      className="w-full bg-slate-100 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 font-bold cursor-not-allowed select-none"
+                    />
+                    <div className="absolute right-3 top-2.5 text-slate-400">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1704,14 +1714,25 @@ export default function CampusPoolApp() {
 
             <div className="space-y-3 mb-4 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Your Name</label>
-                <input
-                  type="text"
-                  placeholder="Enter your name"
-                  value={passengerNameInput}
-                  onChange={(e) => setPassengerNameInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">Passenger (Account)</label>
+                  <span className="text-[10px] font-bold text-slate-400 flex items-center space-x-1">
+                    <Lock className="w-3 h-3 text-slate-400" />
+                    <span>Locked to your username</span>
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    readOnly
+                    disabled
+                    value={currentUser ? currentUser.username : (passengerNameInput || 'Student Passenger')}
+                    className="w-full bg-slate-100 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 font-bold cursor-not-allowed select-none"
+                  />
+                  <div className="absolute right-3 top-2.5 text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                </div>
               </div>
 
               <div>
