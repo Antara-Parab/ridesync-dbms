@@ -487,7 +487,7 @@ export default function CampusPoolApp() {
                 </form>
 
                 <div className="mt-5 p-3 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-500 text-center">
-                  💡 <strong>Quick Demo:</strong> Try username <code className="font-bold text-slate-800 font-mono">aarav</code> or <code className="font-bold text-slate-800 font-mono">ananya</code> with password <code className="font-bold text-slate-800 font-mono">123</code>, or create any new account!
+                  💡 <strong>Quick Demo:</strong> Try username <code className="font-bold text-slate-800 font-mono">tanmay</code> or <code className="font-bold text-slate-800 font-mono">antara</code> with password <code className="font-bold text-slate-800 font-mono">123</code>!
                 </div>
               </div>
             </div>
