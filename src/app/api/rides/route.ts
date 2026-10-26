@@ -71,17 +71,31 @@ export async function POST(req: NextRequest) {
     // Resolve driver_id and vehicle_id from DB
     let driverId = 60003;
     let vehicleId = 60002;
-    const uRows = await query<any[]>('SELECT user_id FROM Users WHERE LOWER(username) = LOWER(?) OR LOWER(full_name) = LOWER(?)', [driver_name, driver_name]);
+    const cleanDriverName = driver_name.trim();
+    const cleanPlate = (vehicle_number || 'MH-04-KR-9798').trim().toUpperCase();
+    const cleanModel = (vehicle_model || 'Honda Amaze').trim();
+
+    const uRows = await query<any[]>('SELECT user_id FROM Users WHERE LOWER(username) = LOWER(?) OR LOWER(full_name) = LOWER(?)', [cleanDriverName, cleanDriverName]);
     if (uRows && uRows.length > 0) {
       driverId = uRows[0].user_id;
-      // Resolve or insert vehicle for this driver
-      const vRows = await query<any[]>('SELECT vehicle_id FROM Vehicles WHERE owner_id = ?', [driverId]);
-      if (vRows && vRows.length > 0) {
-        vehicleId = vRows[0].vehicle_id;
+    }
+
+    // Resolve or insert vehicle for this plate
+    const vPlateRows = await query<any[]>('SELECT vehicle_id FROM Vehicles WHERE vehicle_number = ?', [cleanPlate]);
+    if (vPlateRows && vPlateRows.length > 0) {
+      vehicleId = vPlateRows[0].vehicle_id;
+    } else {
+      // Check if driver already has a vehicle record in Vehicles
+      const vOwnerRows = await query<any[]>('SELECT vehicle_id FROM Vehicles WHERE owner_id = ?', [driverId]);
+      if (vOwnerRows && vOwnerRows.length > 0) {
+        vehicleId = vOwnerRows[0].vehicle_id;
+        await query('UPDATE Vehicles SET model = ?, vehicle_number = ?, capacity = ? WHERE vehicle_id = ?', [
+          cleanModel, cleanPlate, seats + 1, vehicleId
+        ]);
       } else {
         const vRes: any = await query(
           'INSERT INTO Vehicles (owner_id, model, vehicle_number, capacity) VALUES (?, ?, ?, ?)',
-          [driverId, vehicle_model || 'Personal Car', vehicle_number || 'MH-01-XX-0000', seats + 1]
+          [driverId, cleanModel, cleanPlate, seats + 1]
         );
         if (vRes?.insertId) vehicleId = vRes.insertId;
       }
@@ -100,10 +114,10 @@ export async function POST(req: NextRequest) {
     const newRide: MockRide = {
       ride_id: newRideId,
       driver_id: driverId,
-      driver_name: driver_name || 'Student Driver',
+      driver_name: cleanDriverName || 'Student Driver',
       driver_phone: driver_phone || '9820112233',
-      vehicle_model: vehicle_model || 'Personal Car',
-      vehicle_number: vehicle_number || 'MH-01-XX-0000',
+      vehicle_model: cleanModel,
+      vehicle_number: cleanPlate,
       source,
       destination,
       ride_date: new Date().toISOString().split('T')[0],
@@ -136,17 +150,29 @@ export async function DELETE(req: NextRequest) {
 
     const idNum = Number(rideId);
 
-    // 1. Delete associated bookings and the ride from MySQL
+    // 1. Fetch vehicle_id associated with this ride before deleting the ride
+    const rRows = await query<any[]>('SELECT vehicle_id FROM Rides WHERE ride_id = ?', [idNum]);
+    const vehicleId = rRows && rRows.length > 0 ? rRows[0].vehicle_id : null;
+
+    // 2. Delete associated bookings and the ride from MySQL
     await query('DELETE FROM Bookings WHERE ride_id = ?', [idNum]);
     await query('DELETE FROM Rides WHERE ride_id = ?', [idNum]);
 
-    // 2. Remove from mockDb
+    // 3. Delete vehicle from Vehicles table if no other active rides are using it
+    if (vehicleId) {
+      const otherRides = await query<any[]>('SELECT ride_id FROM Rides WHERE vehicle_id = ?', [vehicleId]);
+      if (!otherRides || otherRides.length === 0) {
+        await query('DELETE FROM Vehicles WHERE vehicle_id = ?', [vehicleId]);
+      }
+    }
+
+    // 4. Remove from mockDb
     mockDb.rides = mockDb.rides.filter(r => r.ride_id !== idNum);
     mockDb.bookings = mockDb.bookings.filter(b => b.ride_id !== idNum);
 
     return NextResponse.json({
       success: true,
-      message: 'Carpool ride deleted successfully!',
+      message: 'Carpool ride and associated vehicle deleted successfully!',
     });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
