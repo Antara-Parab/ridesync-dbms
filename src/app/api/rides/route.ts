@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       ORDER BY r.departure_time ASC
     `);
 
-    if (sqlRides && Array.isArray(sqlRides) && sqlRides.length > 0) {
+    if (sqlRides !== null && Array.isArray(sqlRides)) {
       let filtered = sqlRides;
       if (source) {
         filtered = filtered.filter(r => r.source.toLowerCase().includes(source.toLowerCase()));
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Fallback to in-memory store
-    let rides = mockDb.rides.filter(r => r.status === 'ACTIVE' && r.available_seats > 0);
+    let rides = (mockDb.rides || []).filter(r => r.status === 'ACTIVE' && r.available_seats > 0);
     if (source) {
       rides = rides.filter(r => r.source.toLowerCase().includes(source.toLowerCase()));
     }
@@ -68,19 +68,19 @@ export async function POST(req: NextRequest) {
     const fare = Number(cost_per_seat) || 40.0;
     const seats = Number(available_seats) || 3;
 
-    // Resolve driver_id from DB
-    let driverId = 1;
-    let vehicleId = 1;
-    const uRows = await query<any[]>('SELECT user_id FROM Users WHERE username = ? OR full_name = ?', [driver_name, driver_name]);
+    // Resolve driver_id and vehicle_id from DB
+    let driverId = 60003;
+    let vehicleId = 60002;
+    const uRows = await query<any[]>('SELECT user_id FROM Users WHERE LOWER(username) = LOWER(?) OR LOWER(full_name) = LOWER(?)', [driver_name, driver_name]);
     if (uRows && uRows.length > 0) {
       driverId = uRows[0].user_id;
       // Resolve or insert vehicle for this driver
-      const vRows = await query<any[]>('SELECT vehicle_id FROM Vehicles WHERE driver_id = ?', [driverId]);
+      const vRows = await query<any[]>('SELECT vehicle_id FROM Vehicles WHERE owner_id = ?', [driverId]);
       if (vRows && vRows.length > 0) {
         vehicleId = vRows[0].vehicle_id;
       } else {
         const vRes: any = await query(
-          'INSERT INTO Vehicles (driver_id, model, vehicle_number, total_seats) VALUES (?, ?, ?, ?)',
+          'INSERT INTO Vehicles (owner_id, model, vehicle_number, capacity) VALUES (?, ?, ?, ?)',
           [driverId, vehicle_model || 'Personal Car', vehicle_number || 'MH-01-XX-0000', seats + 1]
         );
         if (vRes?.insertId) vehicleId = vRes.insertId;

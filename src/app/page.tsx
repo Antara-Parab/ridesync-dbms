@@ -607,18 +607,14 @@ export default function CampusPoolApp() {
               {rides.length === 0 ? (
                 <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
                   <Car className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-slate-700">No active carpools matching your search</p>
-                  <p className="text-xs text-slate-400 mt-1">Try clearing filters or offer a new ride!</p>
+                  <p className="text-sm font-semibold text-slate-700">No carpools currently available</p>
+                  <p className="text-xs text-slate-400 mt-1 mb-4">Be the first to offer a carpool ride for your college route!</p>
                   <button
                     type="button"
-                    onClick={() => {
-                      setSearchSource('');
-                      setSearchDest('');
-                      fetchRides();
-                    }}
-                    className="mt-3 px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold transition cursor-pointer"
+                    onClick={() => setActiveTab('offer')}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
                   >
-                    View All Rides
+                    + Offer a Carpool Ride Now
                   </button>
                 </div>
               ) : (
