@@ -81,7 +81,7 @@ export default function CampusPoolApp() {
     vehicle_number: '',
     source: '',
     destination: 'VESIT Campus',
-    departure_time: '08:15 AM',
+    departure_time: '',
     available_seats: 3,
     cost_per_seat: 40,
   });
@@ -140,6 +140,64 @@ export default function CampusPoolApp() {
     }
     const formatted = formatVehicleNumber(raw);
     setNewRideForm(prev => ({ ...prev, vehicle_number: formatted }));
+  };
+
+  // Automatically format 24-hour clock time: e.g. 08:30, 14:15, 23:59
+  const format24HourTime = (val: string): string => {
+    // If input already has a colon
+    if (val.includes(':')) {
+      const parts = val.split(':');
+      let h = parts[0].replace(/[^0-9]/g, '').slice(0, 2);
+      let m = parts[1].replace(/[^0-9]/g, '').slice(0, 2);
+      if (!h && !m) return '';
+      if (h) {
+        const hNum = Math.min(23, parseInt(h, 10));
+        h = String(hNum).padStart(2, '0');
+      }
+      if (m) {
+        let mNum = parseInt(m, 10);
+        if (m.length === 1 && mNum > 5) mNum = 5;
+        else if (m.length === 2 && mNum > 59) mNum = 59;
+        m = String(mNum);
+      }
+      return h ? (m !== '' ? h + ':' + m : h + ':') : '';
+    }
+
+    // Pure digits
+    const digits = val.replace(/[^0-9]/g, '').slice(0, 4);
+    if (!digits) return '';
+
+    if (digits.length === 1) {
+      const d = parseInt(digits, 10);
+      if (d >= 3) return '0' + d + ':';
+      return digits;
+    }
+
+    if (digits.length === 2) {
+      const hours = Math.min(23, parseInt(digits, 10));
+      return String(hours).padStart(2, '0') + ':';
+    }
+
+    // 3 or 4 digits
+    const hours = Math.min(23, parseInt(digits.slice(0, 2), 10));
+    const hStr = String(hours).padStart(2, '0');
+    let m1 = parseInt(digits[2], 10);
+    if (m1 > 5) m1 = 5;
+    if (digits.length === 3) {
+      return hStr + ':' + m1;
+    }
+    const m2 = parseInt(digits[3], 10);
+    return hStr + ':' + m1 + m2;
+  };
+
+  const handleDepartureTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputVal = e.target.value;
+    let raw = inputVal;
+    if (newRideForm.departure_time.endsWith(':') && inputVal === newRideForm.departure_time.slice(0, -1)) {
+      raw = inputVal.slice(0, -1);
+    }
+    const formatted = format24HourTime(raw);
+    setNewRideForm(prev => ({ ...prev, departure_time: formatted }));
   };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -315,6 +373,11 @@ export default function CampusPoolApp() {
       return;
     }
 
+    if (!newRideForm.departure_time.trim() || newRideForm.departure_time.length < 4) {
+      showToast('Please enter a valid 24-hour departure time (e.g. 08:30 or 14:15)', 'error');
+      return;
+    }
+
     try {
       const res = await fetch('/api/rides', {
         method: 'POST',
@@ -335,7 +398,7 @@ export default function CampusPoolApp() {
           vehicle_number: '',
           source: '',
           destination: 'VESIT Campus',
-          departure_time: '08:15 AM',
+          departure_time: '',
           available_seats: 3,
           cost_per_seat: 40,
         });
@@ -838,14 +901,15 @@ export default function CampusPoolApp() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Departure Time *</label>
+                    <label className="block font-semibold text-slate-700 mb-1">Departure Time (24-hr) *</label>
                     <input
                       type="text"
-                      placeholder="e.g. 08:15 AM"
+                      placeholder="e.g. 08:30 or 14:15"
+                      maxLength={5}
                       required
                       value={newRideForm.departure_time}
-                      onChange={(e) => setNewRideForm({ ...newRideForm, departure_time: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      onChange={handleDepartureTimeChange}
+                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono font-semibold tracking-wider placeholder:font-sans placeholder:font-normal placeholder:tracking-normal"
                     />
                   </div>
                   <div>
