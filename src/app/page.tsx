@@ -564,6 +564,24 @@ export default function CampusPoolApp() {
     }
   };
 
+  // Driver Deletes an Offered Ride
+  const handleDeleteRide = async (rideId: number) => {
+    if (!confirm('Are you sure you want to delete this offered carpool ride?')) return;
+    try {
+      const res = await fetch(`/api/rides?id=${rideId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Carpool ride deleted from database!', 'success');
+        fetchRides();
+        fetchBookings();
+      } else {
+        showToast(data.error || 'Failed to delete ride', 'error');
+      }
+    } catch {
+      showToast('Network error while deleting ride', 'error');
+    }
+  };
+
   // Clear All Bookings (Admin / Demo Reset)
   const handleClearAllBookings = async () => {
     try {
@@ -915,9 +933,20 @@ export default function CampusPoolApp() {
 
                       {/* Clickable Book Button OR Driver Own-Ride Indicator */}
                       {currentUser && ride.driver_name?.toLowerCase() === currentUser.username.toLowerCase() ? (
-                        <div className="w-full py-2.5 px-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold text-center flex items-center justify-center space-x-1.5">
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Your Carpool Ride (You are Driver)</span>
+                        <div className="flex items-center space-x-2">
+                          <div className="flex-1 py-2.5 px-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold text-center flex items-center justify-center space-x-1.5">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>Your Carpool</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRide(ride.ride_id)}
+                            className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer active:scale-95 shrink-0"
+                            title="Delete this ride"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
                         </div>
                       ) : (
                         <button
@@ -1342,34 +1371,32 @@ export default function CampusPoolApp() {
               );
             })()}
 
-            {/* 2. DRIVER VIEW (ONLY REQUESTS FOR MY CAR) */}
+            {/* 2. DRIVER VIEW */}
             {myRidesSubTab === 'driver' && (() => {
               const currentName = (currentUser?.username || '').toLowerCase();
-              // Filter requests to rides where current user is the driver
+              const myOfferedRides = currentUser
+                ? rides.filter(r => (r.driver_name || '').toLowerCase() === currentName)
+                : [];
               const myCarRequests = currentUser
                 ? bookings.filter(b => (b.driver_name || '').toLowerCase() === currentName)
                 : [];
 
-              const hasOfferedRides = currentUser
-                ? rides.some(r => (r.driver_name || '').toLowerCase() === currentName)
-                : false;
-
               return (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 text-xs text-emerald-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <h4 className="font-bold text-sm text-emerald-950 mb-0.5">
-                        Driver Inbox: Requests for Your Car
+                        Driver Inbox & Carpool Management
                       </h4>
                       <p className="text-[11px] text-emerald-800">
                         {currentUser 
-                          ? `Showing booking requests sent by classmates specifically for ${currentUser.username}'s car.`
-                          : 'Please login to see requests for your carpool.'}
+                          ? `Manage carpools offered by ${currentUser.username} and review classmate seat requests.`
+                          : 'Please login to manage your carpools and seat requests.'}
                       </p>
                     </div>
                     {myCarRequests.filter(b => b.booking_status === 'PENDING').length > 0 && (
                       <span className="text-xs font-extrabold bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded-full shrink-0">
-                        {myCarRequests.filter(b => b.booking_status === 'PENDING').length} Pending Requests
+                        {myCarRequests.filter(b => b.booking_status === 'PENDING').length} Pending Seat Request(s)
                       </span>
                     )}
                   </div>
@@ -1377,7 +1404,7 @@ export default function CampusPoolApp() {
                   {!currentUser ? (
                     <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
                       <Lock className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                      <p className="text-sm font-semibold text-slate-700">Login to manage requests for your car</p>
+                      <p className="text-sm font-semibold text-slate-700">Login to manage your carpools & requests</p>
                       <button
                         type="button"
                         onClick={() => {
@@ -1389,103 +1416,180 @@ export default function CampusPoolApp() {
                         Login as Driver
                       </button>
                     </div>
-                  ) : !hasOfferedRides ? (
-                    <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
-                      <Car className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                      <p className="text-sm font-semibold text-slate-700">You haven't offered any carpool rides yet</p>
-                      <p className="text-xs text-slate-400 mt-1 mb-4">
-                        When you post an offer ride, only then will student requests for your car appear here!
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('offer')}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
-                      >
-                        + Offer a Carpool Ride Now
-                      </button>
-                    </div>
-                  ) : myCarRequests.length === 0 ? (
-                    <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
-                      <Users className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                      <p className="text-sm font-semibold text-slate-700">No incoming passenger requests for your car yet</p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Your ride is live! When classmates apply to rent seats, they will appear right here for your approval.
-                      </p>
-                    </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {myCarRequests.map((b) => (
-                        <div 
-                          key={b.booking_id}
-                          className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between"
-                        >
-                          <div>
-                            <div className="flex items-start justify-between mb-3 border-b border-slate-100 pb-3">
-                              <div>
-                                <div className="font-bold text-slate-900 text-sm flex items-center space-x-1.5">
-                                  <User className="w-4 h-4 text-emerald-600" />
-                                  <span>{b.passenger_name}</span>
-                                </div>
-                                <div className="text-[11px] text-slate-500 flex items-center space-x-1 mt-0.5">
-                                  <Phone className="w-3 h-3 text-slate-400" />
-                                  <span>{b.passenger_phone}</span>
-                                </div>
-                              </div>
-
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                b.booking_status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' :
-                                b.booking_status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
-                                'bg-rose-100 text-rose-800'
-                              }`}>
-                                {b.booking_status === 'ACCEPTED' ? 'Confirmed' :
-                                 b.booking_status === 'PENDING' ? 'Pending Your Approval' : 'Declined'}
-                              </span>
-                            </div>
-
-                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-1.5 mb-4">
-                              <div className="flex justify-between">
-                                <span className="text-slate-400">Route Requested:</span>
-                                <span className="font-semibold text-slate-800">{b.source} ➔ {b.destination}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-slate-400">Seats Requested:</span>
-                                <span className="font-bold text-slate-900">{b.seats_requested} seat(s)</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-slate-400">Fare to Collect:</span>
-                                <span className="font-black text-emerald-700 text-sm">₹{b.discounted_fare}</span>
-                              </div>
-                            </div>
+                    <>
+                      {/* SECTION 1: Active Rides Offered by Driver */}
+                      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center space-x-2">
+                            <Car className="w-5 h-5 text-emerald-600" />
+                            <h4 className="font-bold text-slate-900 text-sm">
+                              Active Rides Offered by You ({myOfferedRides.length})
+                            </h4>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('offer')}
+                            className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline flex items-center space-x-1 cursor-pointer"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                            <span>Offer Another Ride</span>
+                          </button>
+                        </div>
 
-                          <div>
-                            {b.booking_status === 'PENDING' ? (
-                              <div className="flex space-x-2">
+                        {myOfferedRides.length === 0 ? (
+                          <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                            <Car className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                            <p className="text-xs font-semibold text-slate-700">You haven't offered any carpool rides yet</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5 mb-3">
+                              Offer a ride to share travel costs with college mates! You can offer multiple rides.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('offer')}
+                              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
+                            >
+                              + Offer a Carpool Ride Now
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                            {myOfferedRides.map(r => (
+                              <div key={r.ride_id} className="p-4 bg-slate-50 hover:bg-slate-100/70 rounded-xl border border-slate-200 flex flex-col justify-between transition">
+                                <div>
+                                  <div className="flex items-start justify-between gap-2 mb-2">
+                                    <div className="font-bold text-slate-900 text-xs">
+                                      {r.source} <span className="text-emerald-600 font-extrabold">➔</span> {r.destination}
+                                    </div>
+                                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 shrink-0">
+                                      ₹{r.cost_per_seat}/seat
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 space-y-1 mb-3">
+                                    <div className="flex items-center space-x-1.5">
+                                      <Clock className="w-3 h-3 text-slate-400" />
+                                      <span>Departure: <strong className="text-slate-700">{r.departure_time}</strong></span>
+                                    </div>
+                                    <div className="flex items-center space-x-1.5">
+                                      <Users className="w-3 h-3 text-slate-400" />
+                                      <span>Available: <strong className="text-slate-700">{r.available_seats} seat(s)</strong></span>
+                                    </div>
+                                    <div className="flex items-center space-x-1.5">
+                                      <Car className="w-3 h-3 text-slate-400" />
+                                      <span>{r.vehicle_model} ({r.vehicle_number})</span>
+                                    </div>
+                                  </div>
+                                </div>
                                 <button
                                   type="button"
-                                  onClick={() => handleAcceptRequest(b.booking_id)}
-                                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer active:scale-95 flex items-center justify-center space-x-1"
+                                  onClick={() => handleDeleteRide(r.ride_id)}
+                                  className="w-full py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer active:scale-95"
                                 >
-                                  <Check className="w-3.5 h-3.5" />
-                                  <span>Accept Request</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRejectRequest(b.booking_id)}
-                                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer active:scale-95"
-                                >
-                                  Decline
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Delete this Offered Ride</span>
                                 </button>
                               </div>
-                            ) : (
-                              <div className="text-center py-1 text-xs text-slate-500 font-medium">
-                                {b.booking_status === 'ACCEPTED' ? '✅ You confirmed this booking' : '❌ You declined this request'}
-                              </div>
-                            )}
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* SECTION 2: Passenger Booking Requests */}
+                      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center space-x-2">
+                            <Users className="w-5 h-5 text-emerald-600" />
+                            <h4 className="font-bold text-slate-900 text-sm">
+                              Passenger Requests for Your Car ({myCarRequests.length})
+                            </h4>
                           </div>
                         </div>
-                      ))}
-                    </div>
+
+                        {myCarRequests.length === 0 ? (
+                          <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                            <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                            <p className="text-xs font-semibold text-slate-700">No incoming passenger requests for your car yet</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              When classmates apply to book seats in your carpools, their requests will appear right here for your approval.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {myCarRequests.map((b) => (
+                              <div 
+                                key={b.booking_id}
+                                className="bg-slate-50 rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between"
+                              >
+                                <div>
+                                  <div className="flex items-start justify-between mb-3 border-b border-slate-200 pb-3">
+                                    <div>
+                                      <div className="font-bold text-slate-900 text-sm flex items-center space-x-1.5">
+                                        <User className="w-4 h-4 text-emerald-600" />
+                                        <span>{b.passenger_name}</span>
+                                      </div>
+                                      <div className="text-[11px] text-slate-500 flex items-center space-x-1 mt-0.5">
+                                        <Phone className="w-3 h-3 text-slate-400" />
+                                        <span>{b.passenger_phone}</span>
+                                      </div>
+                                    </div>
+
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      b.booking_status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' :
+                                      b.booking_status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
+                                      'bg-rose-100 text-rose-800'
+                                    }`}>
+                                      {b.booking_status === 'ACCEPTED' ? 'Confirmed' :
+                                       b.booking_status === 'PENDING' ? 'Pending Your Approval' : 'Declined'}
+                                    </span>
+                                  </div>
+
+                                  <div className="bg-white p-3 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1.5 mb-4">
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-400">Route Requested:</span>
+                                      <span className="font-semibold text-slate-800">{b.source} ➔ {b.destination}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-400">Seats Requested:</span>
+                                      <span className="font-bold text-slate-900">{b.seats_requested} seat(s)</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-400">Fare to Collect:</span>
+                                      <span className="font-black text-emerald-700 text-sm">₹{b.discounted_fare}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  {b.booking_status === 'PENDING' ? (
+                                    <div className="flex space-x-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAcceptRequest(b.booking_id)}
+                                        className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer active:scale-95 flex items-center justify-center space-x-1"
+                                      >
+                                        <Check className="w-3.5 h-3.5" />
+                                        <span>Accept Request</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRejectRequest(b.booking_id)}
+                                        className="py-2 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer active:scale-95"
+                                      >
+                                        Decline
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="text-center py-1 text-xs text-slate-500 font-medium">
+                                      {b.booking_status === 'ACCEPTED' ? '✅ You confirmed this booking' : '❌ You declined this request'}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               );

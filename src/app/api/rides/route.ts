@@ -124,3 +124,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const rideId = searchParams.get('id');
+
+    if (!rideId) {
+      return NextResponse.json({ success: false, error: 'Ride ID is required' }, { status: 400 });
+    }
+
+    const idNum = Number(rideId);
+
+    // 1. Delete associated bookings and the ride from MySQL
+    await query('DELETE FROM Bookings WHERE ride_id = ?', [idNum]);
+    await query('DELETE FROM Rides WHERE ride_id = ?', [idNum]);
+
+    // 2. Remove from mockDb
+    mockDb.rides = mockDb.rides.filter(r => r.ride_id !== idNum);
+    mockDb.bookings = mockDb.bookings.filter(b => b.ride_id !== idNum);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Carpool ride deleted successfully!',
+    });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
