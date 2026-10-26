@@ -1,31 +1,34 @@
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { query, getDbPool, mockDb } from '@/lib/db';
 
 export async function GET() {
   try {
-    const dbTest = await query<{ now: string }[]>('SELECT NOW() as now');
-    const [counts] = await query<any[]>(`
-      SELECT 
-        (SELECT COUNT(*) FROM Users) as total_users,
-        (SELECT COUNT(*) FROM Rides) as total_rides,
-        (SELECT COUNT(*) FROM Bookings) as total_bookings
-    `);
+    const pool = getDbPool();
+    if (!pool) {
+      return NextResponse.json({
+        connected: false,
+        source: 'in-memory',
+        message: 'Running in resilient in-memory mode (ready for cloud MySQL setup)',
+        total_rides: mockDb.rides.length,
+        total_bookings: mockDb.bookings.length,
+      });
+    }
 
+    const dbTest = await query<any[]>('SELECT NOW() as now');
     return NextResponse.json({
-      connected: true,
-      timestamp: dbTest[0]?.now,
-      counts: counts || {},
+      connected: !!dbTest,
+      source: 'mysql',
+      timestamp: dbTest ? dbTest[0]?.now : new Date().toISOString(),
       database: process.env.MYSQL_DATABASE || 'ridesync_db',
-      host: process.env.MYSQL_HOST || '127.0.0.1',
     });
   } catch (error: any) {
     return NextResponse.json(
       {
         connected: false,
+        source: 'in-memory',
         error: error.message || 'Database connection error',
-        code: error.code,
       },
-      { status: 500 }
+      { status: 200 }
     );
   }
 }

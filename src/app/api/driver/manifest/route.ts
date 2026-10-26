@@ -1,30 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDbPool } from '@/lib/db';
+import { getDbPool, mockDb } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const driverId = Number(searchParams.get('driver_id'));
-
-  if (!driverId) {
-    return NextResponse.json({ success: false, error: 'driver_id parameter is required' }, { status: 400 });
-  }
+  const driverId = Number(searchParams.get('driver_id')) || 1;
 
   const pool = getDbPool();
-  const conn = await pool.getConnection();
+  if (!pool) {
+    const rides = mockDb.rides.map(r => ({
+      ride_id: r.ride_id,
+      route: `${r.source} -> ${r.destination}`,
+      seats_left: r.available_seats,
+      seat_fare: r.cost_per_seat,
+    }));
+    return NextResponse.json({ success: true, manifest: rides, source: 'local' });
+  }
 
   try {
-    let manifestRows: any[] = [];
-    let usedCursorProcedure = false;
-
+    const conn = await pool.getConnection();
     try {
-      const [res]: any = await conn.query('CALL sp_DriverRideReport(?)', [driverId]);
-      // First element in result set contains the temporary manifest table output
-      if (Array.isArray(res) && res.length > 0) {
-        manifestRows = Array.isArray(res[0]) ? res[0] : res;
-      }
-      usedCursorProcedure = true;
-    } catch (procErr: any) {
-      // Fallback query if cursor stored procedure is not compiled
       const [rows]: any = await conn.query(`
         SELECT 
           ride_id, 
@@ -34,18 +28,11 @@ export async function GET(req: NextRequest) {
         FROM Rides 
         WHERE driver_id = ?
       `, [driverId]);
-      manifestRows = rows;
+      return NextResponse.json({ success: true, manifest: rows, source: 'mysql' });
+    } finally {
+      conn.release();
     }
-
-    return NextResponse.json({
-      success: true,
-      driver_id: driverId,
-      manifest: manifestRows,
-      used_cursor_procedure: usedCursorProcedure,
-    });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  } finally {
-    conn.release();
   }
 }

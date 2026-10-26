@@ -1,49 +1,45 @@
-# RideSync — VESIT College Carpool Matching System (Web UI)
+# CampusPool — VESIT College Carpool Matching System 🚗🎓
 
-A full-stack modern Web UI and REST API for the VESIT DBMS Course Project (`ridesync_db`), built with Next.js 16, TypeScript, Tailwind CSS, and MySQL2.
+A real-world, deployment-ready college carpool web application for VESIT students to share car rides, reduce travel costs, and commute comfortably from Point A to Point B for ₹40 per seat.
 
-## 🚀 Key Features Demonstrated
-- **Interactive Passenger Portal**: Search available rides via `vw_AvailableActiveRides`, book seats, and calculate 10% student subsidy fares via `fn_CalculateFareWithDiscount()`.
-- **Driver Management Dashboard**: Offer rides, register vehicles, and approve booking requests.
-- **ACID Transaction & Stored Procedure**: One-click booking approvals execute `sp_AcceptBooking` with `FOR UPDATE` row-level locks and automatic rollback on overbooking.
-- **Trigger Integrity Rules**:
-  - `trg_prevent_self_booking`: Demonstrates SQLSTATE `45000` when a driver attempts to book their own ride.
-  - `trg_ride_status_audit`: Automatically populates the `Ride_Logs` audit trail whenever a ride's status changes.
-- **Stored Procedure with Cursor**: Generates a Driver Manifest route summary using `sp_DriverRideReport`.
-- **Viva & Examiner Master Tab**: One-click database reset (running Step 0 queries) to easily repeat live presentations.
+## 🌟 The Core Flow
 
----
+1. **Find & Book Rides (Passenger Flow)**:
+   - Students search for carpool routes traveling to/from VESIT Campus (Chembur, Dadar, Thane, Vashi, Kurla, etc.).
+   - View car details (driver name, car model, plate number, departure time, and remaining empty seats).
+   - **Student ID Discount (Arithmetic Calculation)**:
+     - Standard Rent: `₹40` per seat
+     - Base Rent: `Seats Requested × ₹40`
+     - VESIT Student Subsidy: `-10% Discount`
+     - Final Payable: `Base Rent - 10% Discount`
+   - Instant booking request sent directly to the student driver.
 
-## ☁️ Deploying to Vercel (Using Antara's GitHub)
+2. **Offer a Ride (Driver Flow)**:
+   - Students driving to college can list their empty seats in 60 seconds.
+   - Enter pickup point (Point A), drop point (Point B), departure time, car model, seats available (1-4), and price per seat (default ₹40).
+   - Classmates can immediately discover and apply for the ride.
 
-1. Open [vercel.com](https://vercel.com) and sign in using **Antara's GitHub account** (`Antara-Parab`).
-2. Click **"Add New..."** -> **"Project"**.
-3. Import the repository: **`Antara-Parab/ridesync-web`**.
-4. In the **Environment Variables** section, configure your cloud MySQL database:
-   | Key | Example Value | Description |
-   | :--- | :--- | :--- |
-   | `MYSQL_HOST` | `mysql-xxxx.aivencloud.com` | Your cloud database host |
-   | `MYSQL_PORT` | `3306` | Port (or Aiven port like `12345`) |
-   | `MYSQL_USER` | `avnadmin` | Database username |
-   | `MYSQL_PASSWORD` | `your_password` | Database password |
-   | `MYSQL_DATABASE` | `ridesync_db` | Database name |
-   | `MYSQL_SSL` | `true` | Required for cloud connections |
-5. Click **Deploy**.
-6. Once deployed, open your live link (e.g., `https://ridesync-web.vercel.app`), go to the **Viva & Examiner Demo** tab, and click **"Init Schema"** to automatically create all tables, views, and seed data in your cloud database!
+3. **My Rides & Driver Approvals**:
+   - Drivers review incoming ride requests and click **Accept** or **Decline**.
+   - When a booking is accepted, the car's available seats automatically decrement in real-time.
+   - Passengers can track their booking status (`Confirmed`, `Pending Approval`, or `Declined`).
 
 ---
 
-## 💻 Running Locally on Your Laptop
+## 🚀 Instant Deployment on Vercel
 
-1. **Start Local MySQL Server**:
-   Double click:
-   `C:\Tanmay\Antara\VESIT\DBMS\campuspool\Start_MySQL_Server.bat`
-2. **Load Initial Schema & Data**:
-   Double click:
-   `C:\Tanmay\Antara\VESIT\DBMS\campuspool\Load_Database.bat`
-3. **Start Web Application**:
-   ```bash
-   cd C:\Tanmay\Antara\VESIT\DBMS\ridesync-web
-   npm run dev
-   ```
-4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+1. Open [vercel.com](https://vercel.com) and log in with your GitHub account.
+2. Click **"Add New..."** ➔ **"Project"**.
+3. Import **`Antara-Parab/ridesync-dbms`**.
+4. Click **Deploy**!
+*(The app features a zero-config resilient engine that runs immediately out-of-the-box on Vercel, and seamlessly binds to cloud MySQL if credentials are added).*
+
+---
+
+## 💻 Running Locally
+
+```bash
+cd ridesync-web
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.

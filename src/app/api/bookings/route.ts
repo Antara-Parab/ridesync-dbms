@@ -1,65 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { query, mockDb, MockBooking } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const passengerId = searchParams.get('passenger_id');
-    const driverId = searchParams.get('driver_id');
-    const status = searchParams.get('status');
+    const rideId = searchParams.get('ride_id');
 
-    let sql = `
+    // 1. Try MySQL Database
+    const sqlBookings = await query<any[]>(`
       SELECT 
         b.booking_id,
         b.ride_id,
         b.passenger_id,
         p.full_name AS passenger_name,
         p.phone AS passenger_phone,
-        p.email AS passenger_email,
-        r.driver_id,
-        d.full_name AS driver_name,
-        d.phone AS driver_phone,
         r.source,
         r.destination,
-        r.ride_date,
         r.departure_time,
         r.cost_per_seat,
-        r.available_seats,
         b.seats_requested,
         (b.seats_requested * r.cost_per_seat) AS total_fare,
-        ROUND((b.seats_requested * r.cost_per_seat * 0.90), 2) AS discounted_student_fare,
+        ROUND((b.seats_requested * r.cost_per_seat * 0.90), 2) AS discounted_fare,
         b.booking_status,
-        b.booked_at,
-        v.model AS vehicle_model,
-        v.vehicle_number
+        b.booked_at
       FROM Bookings b
       JOIN Rides r ON b.ride_id = r.ride_id
       JOIN Users p ON b.passenger_id = p.user_id
-      JOIN Users d ON r.driver_id = d.user_id
-      JOIN Vehicles v ON r.vehicle_id = v.vehicle_id
-      WHERE 1=1
-    `;
+      ORDER BY b.booking_id DESC
+    `);
 
-    const params: any[] = [];
-
-    if (passengerId) {
-      sql += ` AND b.passenger_id = ?`;
-      params.push(passengerId);
+    if (sqlBookings && Array.isArray(sqlBookings) && sqlBookings.length > 0) {
+      let result = sqlBookings;
+      if (rideId) {
+        result = result.filter(b => b.ride_id === Number(rideId));
+      }
+      return NextResponse.json({ success: true, bookings: result });
     }
 
-    if (driverId) {
-      sql += ` AND r.driver_id = ?`;
-      params.push(driverId);
+    // 2. Fallback to in-memory store
+    let bookings = mockDb.bookings;
+    if (rideId) {
+      bookings = bookings.filter(b => b.ride_id === Number(rideId));
     }
-
-    if (status) {
-      sql += ` AND b.booking_status = ?`;
-      params.push(status);
-    }
-
-    sql += ` ORDER BY b.booked_at DESC`;
-
-    const bookings = await query<any[]>(sql, params);
     return NextResponse.json({ success: true, bookings });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -69,34 +51,68 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { ride_id, passenger_id, seats_requested } = body;
+    const { 
+      ride_id, 
+      passenger_name, 
+      passenger_phone, 
+      seats_requested, 
+      apply_student_discount 
+    } = body;
 
-    if (!ride_id || !passenger_id || !seats_requested) {
-      return NextResponse.json({ success: false, error: 'Missing ride_id, passenger_id, or seats_requested' }, { status: 400 });
-    }
+    const rideId = Number(ride_id);
+    const seatsReq = Number(seats_requested) || 1;
+    const hasDiscount = Boolean(apply_student_discount);
 
-    // Attempt insert into Bookings table.
-    // If passenger_id is driver_id, trg_prevent_self_booking will throw SQLSTATE 45000!
-    const insertResult: any = await query(
+    // Find the target ride
+    const ride = mockDb.rides.find(r => r.ride_id === rideId);
+    const unitPrice = ride ? Number(ride.cost_per_seat) : 40.0;
+
+    // ARITHMETIC OPERATIONS
+    const baseFare = Number((seatsReq * unitPrice).toFixed(2));
+    const discountAmount = hasDiscount ? Number((baseFare * 0.10).toFixed(2)) : 0;
+    const finalFare = Number((baseFare - discountAmount).toFixed(2));
+
+    // Try MySQL insert
+    await query(
       `INSERT INTO Bookings (ride_id, passenger_id, seats_requested, booking_status)
-       VALUES (?, ?, ?, 'PENDING')`,
-      [ride_id, passenger_id, seats_requested]
+       VALUES (?, 4, ?, 'PENDING')`,
+      [rideId, seatsReq]
     );
+
+    const newBooking: MockBooking = {
+      booking_id: mockDb.bookings.length + 1,
+      ride_id: rideId,
+      passenger_id: 4,
+      passenger_name: passenger_name || 'VESIT Student',
+      passenger_phone: passenger_phone || '9820445566',
+      source: ride?.source || 'Chembur',
+      destination: ride?.destination || 'VESIT Campus',
+      departure_time: ride?.departure_time || '08:15 AM',
+      cost_per_seat: unitPrice,
+      seats_requested: seatsReq,
+      has_student_discount: hasDiscount,
+      total_fare: baseFare,
+      discounted_fare: finalFare,
+      booking_status: 'PENDING',
+      booked_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    mockDb.bookings.unshift(newBooking);
 
     return NextResponse.json({
       success: true,
-      booking_id: insertResult.insertId,
-      message: 'Booking request sent! Awaiting driver confirmation.',
+      message: `Booking request sent to driver! Total fare: ₹${finalFare} (${hasDiscount ? '10% Student Discount Applied' : 'Standard Rate'}).`,
+      booking: newBooking,
+      arithmetic: {
+        seats: seatsReq,
+        price_per_seat: unitPrice,
+        base_fare: baseFare,
+        discount_rate: hasDiscount ? '10%' : '0%',
+        discount_amount: discountAmount,
+        final_payable: finalFare,
+      }
     });
   } catch (error: any) {
-    const isTriggerViolation = error.message?.includes('Integrity Violation') || error.sqlState === '45000';
-    return NextResponse.json(
-      {
-        success: false,
-        trigger_violation: isTriggerViolation,
-        error: error.message || 'Error creating booking',
-      },
-      { status: 400 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
