@@ -74,7 +74,17 @@ export default function CampusPoolApp() {
   const [applyStudentDiscount, setApplyStudentDiscount] = useState(true);
 
   // Offer Ride Form state
-  const [newRideForm, setNewRideForm] = useState({
+  const [newRideForm, setNewRideForm] = useState<{
+    driver_name: string;
+    driver_phone: string;
+    vehicle_model: string;
+    vehicle_number: string;
+    source: string;
+    destination: string;
+    departure_time: string;
+    available_seats: number | string;
+    cost_per_seat: number | string;
+  }>({
     driver_name: '',
     driver_phone: '9820112233',
     vehicle_model: 'Hyundai i20',
@@ -198,6 +208,65 @@ export default function CampusPoolApp() {
     }
     const formatted = format24HourTime(raw);
     setNewRideForm(prev => ({ ...prev, departure_time: formatted }));
+  };
+
+  // Seat change & blur handlers (Never allow 0 seats, auto-clear 0 on focus)
+  const handleSeatsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (val === '') {
+      setNewRideForm(prev => ({ ...prev, available_seats: '' }));
+      return;
+    }
+    const num = parseInt(val, 10);
+    if (!isNaN(num)) {
+      if (num <= 0) {
+        // Do not allow 0 seats
+        setNewRideForm(prev => ({ ...prev, available_seats: '' }));
+      } else {
+        setNewRideForm(prev => ({ ...prev, available_seats: Math.min(6, num) }));
+      }
+    }
+  };
+
+  const handleSeatsFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (newRideForm.available_seats === 0 || newRideForm.available_seats === '0') {
+      setNewRideForm(prev => ({ ...prev, available_seats: '' }));
+    } else {
+      e.target.select();
+    }
+  };
+
+  const handleSeatsBlur = () => {
+    if (newRideForm.available_seats === '' || Number(newRideForm.available_seats) < 1) {
+      setNewRideForm(prev => ({ ...prev, available_seats: 1 }));
+    }
+  };
+
+  // Rent change & blur handlers (Auto-clear 0 on focus, default 0 on blur if empty)
+  const handleRentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (val === '') {
+      setNewRideForm(prev => ({ ...prev, cost_per_seat: '' }));
+      return;
+    }
+    const num = parseInt(val, 10);
+    if (!isNaN(num) && num >= 0) {
+      setNewRideForm(prev => ({ ...prev, cost_per_seat: num }));
+    }
+  };
+
+  const handleRentFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (newRideForm.cost_per_seat === 0 || newRideForm.cost_per_seat === '0') {
+      setNewRideForm(prev => ({ ...prev, cost_per_seat: '' }));
+    } else {
+      e.target.select();
+    }
+  };
+
+  const handleRentBlur = () => {
+    if (newRideForm.cost_per_seat === '') {
+      setNewRideForm(prev => ({ ...prev, cost_per_seat: 0 }));
+    }
   };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -378,12 +447,22 @@ export default function CampusPoolApp() {
       return;
     }
 
+    const seatsNum = Number(newRideForm.available_seats);
+    if (!seatsNum || seatsNum < 1) {
+      showToast('⚠️ Seats available must be at least 1! You cannot offer 0 seats.', 'error');
+      return;
+    }
+
+    const fareNum = newRideForm.cost_per_seat === '' ? 0 : Number(newRideForm.cost_per_seat);
+
     try {
       const res = await fetch('/api/rides', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...newRideForm,
+          available_seats: seatsNum,
+          cost_per_seat: fareNum,
           driver_name: driverName,
         }),
       });
@@ -913,27 +992,33 @@ export default function CampusPoolApp() {
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Seats Available *</label>
+                    <label className="block font-semibold text-slate-700 mb-1">Seats Available (Min: 1) *</label>
                     <input
                       type="number"
                       min="1"
                       max="6"
                       required
+                      placeholder="1 - 6"
                       value={newRideForm.available_seats}
-                      onChange={(e) => setNewRideForm({ ...newRideForm, available_seats: Number(e.target.value) })}
-                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      onChange={handleSeatsChange}
+                      onFocus={handleSeatsFocus}
+                      onBlur={handleSeatsBlur}
+                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold"
                     />
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">Rent / Seat (₹) *</label>
                     <input
                       type="number"
-                      min="10"
+                      min="0"
                       step="5"
                       required
+                      placeholder="0"
                       value={newRideForm.cost_per_seat}
-                      onChange={(e) => setNewRideForm({ ...newRideForm, cost_per_seat: Number(e.target.value) })}
-                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      onChange={handleRentChange}
+                      onFocus={handleRentFocus}
+                      onBlur={handleRentBlur}
+                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold"
                     />
                   </div>
                 </div>
@@ -943,7 +1028,7 @@ export default function CampusPoolApp() {
                   className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center justify-center space-x-2 cursor-pointer active:scale-95"
                 >
                   <Car className="w-4 h-4" />
-                  <span>Publish Ride to Database for ₹{newRideForm.cost_per_seat} / Seat</span>
+                  <span>Publish Ride to Database for ₹{newRideForm.cost_per_seat === '' ? 0 : newRideForm.cost_per_seat} / Seat</span>
                 </button>
               </form>
             </div>
