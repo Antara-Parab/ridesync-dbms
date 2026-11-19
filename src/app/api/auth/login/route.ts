@@ -12,14 +12,14 @@ export async function POST(req: NextRequest) {
     const cleanUsername = username.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // Query MySQL Users table
+    // query users
     const rows = await query<any[]>(
       'SELECT user_id, username, full_name, password_hash FROM Users WHERE username = ? OR email = ?',
       [cleanUsername, `${cleanUsername}@ves.ac.in`]
     );
 
     if (!rows || rows.length === 0) {
-      // In-memory fallback for college logins if DB is momentarily unreachable
+      // fallback auth
       const demoUsers: Record<string, { id: number; name: string }> = {
         admin: { id: 1, name: 'Administrator' },
         tanmay: { id: 60003, name: 'Tanmay Shinde' },
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     const user = rows[0];
 
-    // Check password
+    // verify password
     if (user.password_hash !== cleanPassword && user.password_hash !== '123') {
       return NextResponse.json({ success: false, error: 'Incorrect password. Please try again.' }, { status: 401 });
     }

@@ -47,7 +47,6 @@ interface AuthUser {
 }
 
 export default function CampusPoolApp() {
-  // Auth state
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [authUsername, setAuthUsername] = useState('');
@@ -58,32 +57,27 @@ export default function CampusPoolApp() {
   const [isBookingSeat, setIsBookingSeat] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<number | string | null>(null);
 
-  // Admin Live Tables state
   const [adminTables, setAdminTables] = useState<Record<string, any[]> | null>(null);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminActiveTable, setAdminActiveTable] = useState<string>('all');
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string>('');
 
-  // App tabs: 'find' | 'offer' | 'bookings'
   const [activeTab, setActiveTab] = useState<'find' | 'offer' | 'bookings'>('find');
   const [myRidesSubTab, setMyRidesSubTab] = useState<'passenger' | 'driver'>('passenger');
   const [rides, setRides] = useState<Ride[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // Search state
   const [searchSource, setSearchSource] = useState('');
   const [searchDest, setSearchDest] = useState('');
   const sourceInputRef = useRef<HTMLInputElement>(null);
 
-  // Booking Modal state
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
   const [passengerNameInput, setPassengerNameInput] = useState('');
   const [passengerPhone, setPassengerPhone] = useState('9820445566');
   const [requestedSeats, setRequestedSeats] = useState(1);
   const [applyStudentDiscount, setApplyStudentDiscount] = useState(true);
 
-  // Offer Ride Form state
   const [newRideForm, setNewRideForm] = useState<{
     driver_name: string;
     driver_phone: string;
@@ -106,13 +100,12 @@ export default function CampusPoolApp() {
     cost_per_seat: 50,
   });
 
-  // Automatically format Indian Vehicle Number Plate: e.g. MH-01-AB-1234
+  // format number plate
   const formatVehicleNumber = (val: string): string => {
     const clean = val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
     if (!clean) return '';
 
     let res = '';
-    // Part 1: State code (up to 2 letters, e.g. MH, DL, KA)
     let i = 0;
     while (i < clean.length && i < 2 && /[A-Z]/.test(clean[i])) {
       res += clean[i];
@@ -121,7 +114,6 @@ export default function CampusPoolApp() {
     if (i >= clean.length) return res;
 
     res += '-';
-    // Part 2: RTO digits (up to 2 digits, e.g. 01, 02)
     let rtoCount = 0;
     while (i < clean.length && rtoCount < 2 && /[0-9]/.test(clean[i])) {
       res += clean[i];
@@ -131,7 +123,6 @@ export default function CampusPoolApp() {
     if (i >= clean.length) return res;
 
     res += '-';
-    // Part 3: Series letters (up to 2 letters, e.g. AB, TS, AP)
     let seriesCount = 0;
     while (i < clean.length && seriesCount < 2 && /[A-Z]/.test(clean[i])) {
       res += clean[i];
@@ -141,7 +132,6 @@ export default function CampusPoolApp() {
     if (i >= clean.length) return res;
 
     res += '-';
-    // Part 4: 4 digits (e.g. 1234)
     let numCount = 0;
     while (i < clean.length && numCount < 4 && /[0-9]/.test(clean[i])) {
       res += clean[i];
@@ -162,9 +152,8 @@ export default function CampusPoolApp() {
     setNewRideForm(prev => ({ ...prev, vehicle_number: formatted }));
   };
 
-  // Automatically format 24-hour clock time: e.g. 08:30, 14:15, 23:59
+  // format time
   const format24HourTime = (val: string): string => {
-    // If input already has a colon
     if (val.includes(':')) {
       const parts = val.split(':');
       let h = parts[0].replace(/[^0-9]/g, '').slice(0, 2);
@@ -183,7 +172,6 @@ export default function CampusPoolApp() {
       return h ? (m !== '' ? h + ':' + m : h + ':') : '';
     }
 
-    // Pure digits
     const digits = val.replace(/[^0-9]/g, '').slice(0, 4);
     if (!digits) return '';
 
@@ -198,7 +186,6 @@ export default function CampusPoolApp() {
       return String(hours).padStart(2, '0') + ':';
     }
 
-    // 3 or 4 digits
     const hours = Math.min(23, parseInt(digits.slice(0, 2), 10));
     const hStr = String(hours).padStart(2, '0');
     let m1 = parseInt(digits[2], 10);
@@ -220,7 +207,7 @@ export default function CampusPoolApp() {
     setNewRideForm(prev => ({ ...prev, departure_time: formatted }));
   };
 
-  // Seat change & blur handlers (Never allow 0 seats, auto-clear 0 on focus)
+  // seat handlers
   const handleSeatsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     if (val === '') {
@@ -230,8 +217,7 @@ export default function CampusPoolApp() {
     const num = parseInt(val, 10);
     if (!isNaN(num)) {
       if (num <= 0) {
-        // Do not allow 0 seats
-        setNewRideForm(prev => ({ ...prev, available_seats: '' }));
+            setNewRideForm(prev => ({ ...prev, available_seats: '' }));
       } else {
         setNewRideForm(prev => ({ ...prev, available_seats: Math.min(6, num) }));
       }
@@ -252,7 +238,7 @@ export default function CampusPoolApp() {
     }
   };
 
-  // Rent change & blur handlers (Auto-clear 0 on focus, default 0 on blur if empty)
+  // fare handlers
   const handleRentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     if (val === '') {
@@ -279,7 +265,7 @@ export default function CampusPoolApp() {
     }
   };
 
-  // User Preset for Ride Offers (e.g. Tanmay: Honda Amaze, MH-04-KR-9798, Thane -> VESIT Campus, 07:30, 1 seat, ₹67)
+  // user presets
   const applyUserPreset = (username: string) => {
     const clean = username.trim().toLowerCase();
     if (clean === 'tanmay') {
@@ -307,7 +293,7 @@ export default function CampusPoolApp() {
     setTimeout(() => setToast(null), 5000);
   };
 
-  // Check saved session & fetch initial data
+  // initial load
   useEffect(() => {
     const savedUser = localStorage.getItem('campuspool_user');
     if (savedUser) {
@@ -322,7 +308,6 @@ export default function CampusPoolApp() {
         localStorage.removeItem('campuspool_user');
       }
     } else {
-      // Default to empty when logged out
       setPassengerNameInput('');
     }
     fetchRides();
@@ -359,7 +344,7 @@ export default function CampusPoolApp() {
     }
   };
 
-  // Fetch Live TiDB Tables for Admin
+  // fetch admin tables
   const fetchAdminTables = async () => {
     setAdminLoading(true);
     try {
@@ -385,7 +370,7 @@ export default function CampusPoolApp() {
     }
   }, [currentUser]);
 
-  // Admin Live Tables Renderer
+  // render tables
   const renderTableData = (tableName: string, data: any[] | undefined) => {
     const rows = data || [];
     if (rows.length === 0) {
@@ -419,12 +404,12 @@ export default function CampusPoolApp() {
                   const val = row[col];
                   let displayVal: React.ReactNode = String(val ?? 'NULL');
 
-                  // Format dates/timestamps
+                  // format date
                   if (typeof val === 'string' && val.includes('T') && val.includes('Z')) {
                     displayVal = new Date(val).toLocaleString();
                   }
 
-                  // Status badge
+                  // status badge
                   if (col.toLowerCase().includes('status') && typeof val === 'string') {
                     const status = val.toUpperCase();
                     const colorClass = 
@@ -439,8 +424,7 @@ export default function CampusPoolApp() {
                     );
                   }
 
-                  // ID formatting
-                  if (col.toLowerCase().endsWith('_id') && val != null) {
+                                  if (col.toLowerCase().endsWith('_id') && val != null) {
                     displayVal = <span className="font-mono text-slate-600 font-bold">#{val}</span>;
                   }
 
@@ -462,7 +446,7 @@ export default function CampusPoolApp() {
     );
   };
 
-  // Regular Auth Form Submit
+  // submit auth
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authUsername.trim() || !authPassword.trim()) {
@@ -523,7 +507,7 @@ export default function CampusPoolApp() {
     showToast('Logged out successfully', 'info');
   };
 
-  // Open Booking Modal for Any User
+  // open booking
   const handleOpenBookingModal = (ride: Ride) => {
     if (!currentUser) {
       showToast('Please log in with your student account to book a seat!', 'info');
@@ -550,7 +534,7 @@ export default function CampusPoolApp() {
     setPassengerNameInput(currentUser.username);
   };
 
-  // Student Books a Seat
+  // book seat
   const handleConfirmBooking = async () => {
     if (!selectedRide) return;
 
@@ -594,7 +578,7 @@ export default function CampusPoolApp() {
     }
   };
 
-  // Driver Offers a New Ride
+  // offer ride
   const handleOfferRide = async (e: React.FormEvent) => {
     e.preventDefault();
     const driverName = (currentUser ? currentUser.username : newRideForm.driver_name).trim().toLowerCase();
@@ -665,9 +649,8 @@ export default function CampusPoolApp() {
     }
   };
 
-  // Driver Accepts Booking Request (Optimistic UI for Instant Click)
+  // accept booking
   const handleAcceptRequest = async (bookingId: number) => {
-    // Instant optimistic update
     setBookings(prev => prev.map(b => b.booking_id === bookingId ? { ...b, booking_status: 'ACCEPTED' } : b));
     setActionLoadingId(bookingId);
 
@@ -690,9 +673,8 @@ export default function CampusPoolApp() {
     }
   };
 
-  // Driver Declines Booking Request (Optimistic UI for Instant Click)
+  // decline booking
   const handleRejectRequest = async (bookingId: number) => {
-    // Instant optimistic update
     setBookings(prev => prev.map(b => b.booking_id === bookingId ? { ...b, booking_status: 'REJECTED' } : b));
     setActionLoadingId(bookingId);
 
@@ -714,11 +696,10 @@ export default function CampusPoolApp() {
     }
   };
 
-  // Driver Deletes an Offered Ride (Optimistic UI for Instant Click)
+  // delete ride
   const handleDeleteRide = async (rideId: number) => {
     if (!confirm('Are you sure you want to delete this offered carpool ride?')) return;
     
-    // Instant optimistic removal from UI
     const previousRides = [...rides];
     setRides(prev => prev.filter(r => r.ride_id !== rideId));
     setActionLoadingId(rideId);
@@ -742,7 +723,7 @@ export default function CampusPoolApp() {
     }
   };
 
-  // Clear All Bookings (Admin / Demo Reset)
+  // clear bookings
   const handleClearAllBookings = async () => {
     try {
       const res = await fetch('/api/bookings', { method: 'DELETE' });
@@ -759,7 +740,7 @@ export default function CampusPoolApp() {
     }
   };
 
-  // Arithmetic Calculation for Selected Ride
+  // calculate fare
   const unitPrice = selectedRide ? Number(selectedRide.cost_per_seat) : 0;
   const baseFare = requestedSeats * unitPrice;
   const discountAmount = applyStudentDiscount ? baseFare * 0.10 : 0;
@@ -1270,7 +1251,7 @@ export default function CampusPoolApp() {
                           );
                         }
 
-                        // Check if current logged in user already applied or booked this ride
+                        // existing booking check
                         const currentName = (currentUser?.username || '').toLowerCase();
                         const userBooking = currentUser
                           ? bookings.find(b => b.ride_id === ride.ride_id && (b.passenger_name || '').toLowerCase() === currentName && (b.booking_status === 'PENDING' || b.booking_status === 'ACCEPTED'))
@@ -1607,7 +1588,7 @@ export default function CampusPoolApp() {
                 );
               }
 
-              // Filter to current user's booked trips safely
+              // user bookings
               const userTrips = bookings.filter(b => (b.passenger_name || '').toLowerCase() === currentName);
 
               const pendingTrips = userTrips.filter(b => b.booking_status === 'PENDING');

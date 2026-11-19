@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Username must be at least 3 characters' }, { status: 400 });
     }
 
-    // 1. Try MySQL Database
+    // database insert
     const existing = await query<any[]>('SELECT user_id FROM Users WHERE username = ? OR email = ?', [
       cleanUsername,
       `${cleanUsername}@ves.ac.in`

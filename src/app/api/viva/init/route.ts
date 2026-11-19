@@ -4,7 +4,7 @@ import { INITIALIZE_SCHEMA_SQL, SEED_DATA_SQL } from '@/lib/schema-sql';
 
 export async function POST() {
   try {
-    // Execute DDL statement by statement
+    // execute ddl
     const ddlStatements = INITIALIZE_SCHEMA_SQL.split(';')
       .map(s => s.trim())
       .filter(s => s.length > 0);
@@ -13,7 +13,7 @@ export async function POST() {
       await query(sql);
     }
 
-    // Execute Seed statement by statement
+    // execute seed
     const seedStatements = SEED_DATA_SQL.split(';')
       .map(s => s.trim())
       .filter(s => s.length > 0);

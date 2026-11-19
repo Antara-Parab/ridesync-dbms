@@ -1,8 +1,4 @@
--- ============================================================================
--- PROJECT: RideSync — College Carpool Matching System
--- SPECIFICATION: Shared Master Project Specification (2026-27)
--- TARGET: MySQL Server 8.0+ / MySQL Workbench
--- ============================================================================
+-- RideSync MySQL Schema
 
 DROP DATABASE IF EXISTS ridesync_db;
 CREATE DATABASE ridesync_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -10,11 +6,9 @@ USE ridesync_db;
 
 SET GLOBAL log_bin_trust_function_creators = 1;
 
--- ============================================================================
--- 1. TABLE CREATION (DDL)
--- ============================================================================
+-- Tables
 
--- Table 1: Users (Students & Drivers)
+-- Users
 CREATE TABLE Users (
     user_id INT AUTO_INCREMENT PRIMARY KEY,
     full_name VARCHAR(100) NOT NULL,
@@ -24,7 +18,7 @@ CREATE TABLE Users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- Table 2: Vehicles (Vehicle details registered by students)
+-- Vehicles
 CREATE TABLE Vehicles (
     vehicle_id INT AUTO_INCREMENT PRIMARY KEY,
     owner_id INT NOT NULL,
@@ -37,7 +31,7 @@ CREATE TABLE Vehicles (
     CONSTRAINT chk_vehicle_capacity CHECK (capacity > 0)
 ) ENGINE=InnoDB;
 
--- Table 3: Rides (Rides offered by student drivers)
+-- Rides
 CREATE TABLE Rides (
     ride_id INT AUTO_INCREMENT PRIMARY KEY,
     driver_id INT NOT NULL,
@@ -58,7 +52,7 @@ CREATE TABLE Rides (
     CONSTRAINT chk_cost_per_seat CHECK (cost_per_seat >= 0)
 ) ENGINE=InnoDB;
 
--- Table 4: Bookings (Passenger ride requests & decisions)
+-- Bookings
 CREATE TABLE Bookings (
     booking_id INT AUTO_INCREMENT PRIMARY KEY,
     ride_id INT NOT NULL,
@@ -73,7 +67,7 @@ CREATE TABLE Bookings (
     CONSTRAINT chk_seats_requested CHECK (seats_requested > 0)
 ) ENGINE=InnoDB;
 
--- Table 5: Ratings (Post-ride feedback and driver ratings)
+-- Ratings
 CREATE TABLE Ratings (
     rating_id INT AUTO_INCREMENT PRIMARY KEY,
     booking_id INT NOT NULL,
@@ -85,7 +79,7 @@ CREATE TABLE Ratings (
     CONSTRAINT chk_rating_range CHECK (rating_value BETWEEN 1 AND 5)
 ) ENGINE=InnoDB;
 
--- Table 6: Ride_Logs (Audit trail for status tracking and trigger demonstration)
+-- Ride_Logs
 CREATE TABLE Ride_Logs (
     log_id INT AUTO_INCREMENT PRIMARY KEY,
     ride_id INT NOT NULL,
@@ -94,18 +88,14 @@ CREATE TABLE Ride_Logs (
     changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- ============================================================================
--- 2. INDEXING (Query Performance Optimization)
--- ============================================================================
+-- Indexes
 
 CREATE INDEX idx_rides_search ON Rides(source, destination, ride_date, status);
 CREATE INDEX idx_bookings_status ON Bookings(ride_id, booking_status);
 
--- ============================================================================
--- 3. VIEWS (Abstraction & Reporting)
--- ============================================================================
+-- Views
 
--- View 1: Active Rides Available for Booking (Section 6.1 / 8 in spec)
+-- Available active rides
 CREATE OR REPLACE VIEW vw_AvailableActiveRides AS
 SELECT 
     r.ride_id,
@@ -125,7 +115,7 @@ JOIN Users u ON r.driver_id = u.user_id
 JOIN Vehicles v ON r.vehicle_id = v.vehicle_id
 WHERE r.status = 'ACTIVE' AND r.available_seats > 0;
 
--- View 2: Driver Performance Analytics
+-- Driver analytics
 CREATE OR REPLACE VIEW vw_DriverAnalytics AS
 SELECT 
     u.user_id AS driver_id,
@@ -137,13 +127,11 @@ FROM Users u
 LEFT JOIN Rides r ON u.user_id = r.driver_id
 GROUP BY u.user_id, u.full_name;
 
--- ============================================================================
--- 4. TRIGGERS (Enforcing Business Rules & Auditing)
--- ============================================================================
+-- Triggers
 
 DELIMITER $$
 
--- Trigger 1: Prevent Driver from Booking Their Own Ride (Section 6.4: No Self-Booking)
+-- Prevent self-booking
 DROP TRIGGER IF EXISTS trg_prevent_self_booking$$
 CREATE TRIGGER trg_prevent_self_booking
 BEFORE INSERT ON Bookings
@@ -157,7 +145,7 @@ BEGIN
     END IF;
 END$$
 
--- Trigger 2: Audit Ride Status Changes into Ride_Logs
+-- Audit ride status changes
 DROP TRIGGER IF EXISTS trg_ride_status_audit$$
 CREATE TRIGGER trg_ride_status_audit
 AFTER UPDATE ON Rides
@@ -169,11 +157,9 @@ BEGIN
     END IF;
 END$$
 
--- ============================================================================
--- 5. STORED FUNCTION (Business Logic & Calculations)
--- ============================================================================
+-- Stored Functions
 
--- Function: Calculate Total Ride Cost with Optional 10% College Student Subsidy
+-- Calculate fare with student discount
 DROP FUNCTION IF EXISTS fn_CalculateFareWithDiscount$$
 CREATE FUNCTION fn_CalculateFareWithDiscount(
     p_cost_per_seat DECIMAL(8,2),
@@ -191,11 +177,9 @@ BEGIN
     RETURN ROUND(v_total, 2);
 END$$
 
--- ============================================================================
--- 6. STORED PROCEDURES (ACID Concurrency & Driver Reports)
--- ============================================================================
+-- Stored Procedures
 
--- Procedure 1: Accept Booking with Overbooking Prevention (Section 7.2 & Testing T07/T08)
+-- Accept booking procedure
 DROP PROCEDURE IF EXISTS sp_AcceptBooking$$
 CREATE PROCEDURE sp_AcceptBooking(
     IN p_booking_id INT,
@@ -207,7 +191,6 @@ proc_label: BEGIN
     DECLARE v_avail_seats INT;
     DECLARE v_current_status VARCHAR(20);
 
-    -- Declare error handler to rollback on error
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -216,7 +199,6 @@ proc_label: BEGIN
 
     START TRANSACTION;
 
-    -- Fetch booking details
     SELECT ride_id, seats_requested, booking_status 
     INTO v_ride_id, v_seats_req, v_current_status
     FROM Bookings 
@@ -234,15 +216,13 @@ proc_label: BEGIN
         LEAVE proc_label;
     END IF;
 
-    -- Lock the ride row to prevent race conditions / overbooking
+    -- lock ride row
     SELECT available_seats INTO v_avail_seats
     FROM Rides
     WHERE ride_id = v_ride_id
     FOR UPDATE;
 
-    -- Check if enough seats remain
     IF v_avail_seats >= v_seats_req THEN
-        -- Accept booking and deduct seats
         UPDATE Bookings 
         SET booking_status = 'ACCEPTED' 
         WHERE booking_id = p_booking_id;
